@@ -41,5 +41,5 @@ class Command(BaseCommand):
         management.call_command("015_matchfile_variables",  upload_tag, dataset_tag)
         management.call_command("016_create_dynamic_instances",  upload_tag, dataset_tag)
         management.call_command("017_datatype_work",  upload_tag, dataset_tag)
-        #management.call_command("018_create_data_model_template_file",  upload_tag, dataset_tag)
+        management.call_command("018_create_data_model_template_file",  upload_tag, dataset_tag)
         

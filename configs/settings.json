@@ -1,18 +1,18 @@
 {
-	"S_K" : "",
+	"S_K" : "bm4nex9-5w_f=id)q89!_v82boxb^+xeg_bf-$x9trer8q8x%$",
 	"DB" : {
-		"DB_NAME" : "",
-	    "DB_HOST" : "",
+		"DB_NAME" : "local_dev",
+	    "DB_HOST" : "localhost",
 		"DB_PORT" : 5432,
-        "DB_USER" : "",
-        "DB_PASS" : ""
+        "DB_USER" : "postgres",
+        "DB_PASS" : "123457890"
 	},
-	"ALLOWED_HOSTS" : ["localhost"],
+	"ALLOWED_HOSTS" : ["localhost",  "10.25.107.101", "127.0.0.1"],
 	"LOADER" : {
-		"DATA_ROOT" : "",
-		"MATCH_FILE_DIR" : "",
-		"UPLOAD_ZIP_DIR" : ""
+		"DATA_ROOT" : "/mnt/c/Users/mxxun/Documents/CODE/solarbase/data/data",
+		"MATCH_FILE_DIR" : "/mnt/c/Users/mxxun/Documents/CODE/solarbase/data/match",
+		"UPLOAD_ZIP_DIR" : "/mnt/c/Users/mxxun/Documents/CODE/solarbase/data/zip"
 	},
-	"LOG_FILE" : "",
-    "COLLISIONS_LOG_DIR" : ""
+	"LOG_FILE" : "/mnt/c/Users/mxxun/Documents/CODE/solarbase/logs/log.md",
+    "COLLISIONS_LOG_DIR" : "/mnt/c/Users/mxxun/Documents/CODE/solarbase/logs/collisions"
 }
