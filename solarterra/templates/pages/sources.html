@@ -52,7 +52,7 @@
 
 
 <div id="step-2" {% if fresh %} hidden {% endif %}>
-	<form id="form" method="post" action="{% url 'search' %}" target="_blank">
+	<form id="form" method="post">
 	
 	{% csrf_token %}
 	<div hidden>{{ form.sources }}</div>
@@ -75,8 +75,17 @@
 
 	<div>{{ form.non_field_errors }}</div>
 
+	<div class="page-title">3. Формат экспорта</div>
+	<div>
+		<label><input type="radio" name="export_format" value="original_cdf"> Original CDF</label>
+    	<label><input type="radio" name="export_format" value="clean_cdf"> Clean CDF</label>
+    	<label><input type="radio" name="export_format" value="csv"> CSV</label>
+	</div>
 
-	<div><button class="btn" type="submit" >Поcтроить</button></div>
+	<div>
+		<button class="btn" type="submit" formaction="{% url 'search' %}" formtarget="_blank">Поcтроить</button>
+		<button class="btn" type="submit" formaction="{% url 'export' %}" formtarget="_blank">Экспортировать данные (чпык)</button>
+	</div>
 	
 	</form>
 </div>

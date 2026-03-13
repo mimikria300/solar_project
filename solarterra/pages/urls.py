@@ -11,9 +11,10 @@ urlpatterns = [
     path('upload_info/<uuid:upload_id>', views.upload_info, name="upload"),
     path('variable_info/<uuid:variable_id>', views.variable_info, name="variable"),
     
-    # search and plotting
+    # search, export and plotting
     path('search', search_views.search, name="search"),
-    
+    path('export', search_views.export, name="export"),
+
     # technical data
     path('system_data', views.system_data, name="system_data"),
     path('logs', views.logs, name="logs"),

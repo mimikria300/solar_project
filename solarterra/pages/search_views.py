@@ -1,7 +1,7 @@
 from django.shortcuts import render
 from load_cdf.models import *
 from data_cdf.models import *
-from django.http import Http404
+from django.http import Http404, HttpResponse
 from django.apps import apps
 
 from pages.forms import SourceForm
@@ -59,3 +59,14 @@ def search(request):
                 'form' : SourceForm(initial={'ts_start' : dt.datetime(year=2013, month=1, day=1, hour=1), 'ts_end' : dt.datetime(year=2013, month=12, day=30, hour=1)}),
                 'fresh' : True
         })
+
+def export(request):
+    if request.method != "POST":
+        return HttpResponse('Export endpoint expects POST', status=405)
+
+    export_format = request.POST.get('export_format')
+    sources = request.POST.getlist('sources')
+    ts_start = request.POST.get("ts_start")
+    ts_end = request.POST.get("ts_end")
+
+    return HttpResponse('Export stub is OK', status=200)
