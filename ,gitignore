@@ -1,4 +1,6 @@
 ./configs/settings.json
+./solarterra_submodules/data_cdf/migrations
+./solarterra_submodules/data_cdf/models
 __pycache__/
 *.pyc
 *.pyo
