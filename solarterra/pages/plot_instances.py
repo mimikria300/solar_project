@@ -7,7 +7,7 @@ import math
 import datetime as dt
 from pages.figures import scatter, n_trace
 
-
+#PIN optimized query to db
 class DBQuery():
 
 

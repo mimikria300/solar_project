@@ -60,11 +60,6 @@ class SourceForm(forms.Form):
         widget=DateTimeWidget(attrs={'id': "dtw_end"})
     )
 
-    validate = forms.BooleanField(
-        label="Валидировать данные",
-        required=False
-    )
-
     def clean(self):
         cleaned_data = super().clean()
         ts_start = cleaned_data.get("ts_start")
@@ -73,3 +68,21 @@ class SourceForm(forms.Form):
         if ts_start >= ts_end:
             raise ValidationError("Start time should be before end time.")
 
+class PlotForm(forms.Form):
+    validate = forms.BooleanField(
+        label="Валидировать данные",
+        required=False
+    )
+
+
+class ExportForm(forms.Form):
+    EXPORT_FORMAT_CHOICES = (
+        ("original_cdf", "Original CDF"),
+        ("clean_cdf", "Clean CDF"),
+        ("csv", "CSV"),
+    )
+
+    export_format = forms.ChoiceField(
+        choices=EXPORT_FORMAT_CHOICES,
+        required=True
+    )

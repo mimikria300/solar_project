@@ -14,7 +14,8 @@ urlpatterns = [
     # search, export and plotting
     path('search', search_views.search, name="search"),
     path('export', search_views.export, name="export"),
-    
+    path('plot', search_views.plot, name="plot"),
+
     # technical data
     path('system_data', views.system_data, name="system_data"),
     path('logs', views.logs, name="logs"),
