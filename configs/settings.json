@@ -9,10 +9,10 @@
 	},
 	"ALLOWED_HOSTS" : ["localhost",  "10.25.107.101", "127.0.0.1"],
 	"LOADER" : {
-		"DATA_ROOT" : "/mnt/c/Users/mxxun/Documents/CODE/solarbase/data/data",
-		"MATCH_FILE_DIR" : "/mnt/c/Users/mxxun/Documents/CODE/solarbase/data/match",
-		"UPLOAD_ZIP_DIR" : "/mnt/c/Users/mxxun/Documents/CODE/solarbase/data/zip"
+	"DATA_ROOT" : "/home/mxxun/dev/solarbase/data/data",
+	"MATCH_FILE_DIR" : "/home/mxxun/dev/solarbase/data/match",
+	"UPLOAD_ZIP_DIR" : "/home/mxxun/dev/solarbase/data/zip"
 	},
-	"LOG_FILE" : "/mnt/c/Users/mxxun/Documents/CODE/solarbase/logs/log.md",
-    "COLLISIONS_LOG_DIR" : "/mnt/c/Users/mxxun/Documents/CODE/solarbase/logs/collisions"
-}
+	"LOG_FILE" : "/home/mxxun/dev/solarbase/logs/log.md",
+	"COLLISIONS_LOG_DIR" : "/home/mxxun/dev/solarbase/logs/collisions"
+	}
