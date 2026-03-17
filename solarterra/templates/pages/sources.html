@@ -69,8 +69,6 @@
 		<div>{{ source_form.ts_end }}</div>
 	</div>
 	<div>{{ source_form.errors.ts_end }}</div>
-
-	<div>{{ source_form.validate }} <label for="id_validate"> {{ source_form.validate.label }}</label></div>
 	
 
 	<div>
@@ -83,6 +81,7 @@
 	{#TODO: clean up style here #}
 	<div class="page-title">3. Параметры построения и экспорта</div>
 	<div>
+		<div>{{ plot_form.validate }} <label for="id_validate"> {{ plot_form.validate.label }}</label></div>
 		{{ export_form.export_format }}
 		{{ export_form.errors.export_format }}
 	</div>

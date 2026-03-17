@@ -9,6 +9,7 @@ import datetime as dt
 import csv
 
 from pages.plotting import get_plots
+from pages.export import csv_generator
 
 def _default_source_initial():
     return {
@@ -49,6 +50,8 @@ class Echo:
         return value
 
 def _csv_preview_stream(ts_start, ts_end, sources):
+
+    '''stub for testing the streaming export. It will yield a header and a few rows of data.'''
     writer = csv.writer(Echo())
     yield writer.writerow(["timestamp", "note"])
     yield writer.writerow([ts_start.isoformat(), f"sources={len(sources)}"])
@@ -80,7 +83,7 @@ def export(request):
     if export_format != "csv": return HttpResponse("Only csv is implemented for now", status=501)
 
     response = StreamingHttpResponse(
-        _csv_preview_stream(ts_start, ts_end, sources),
+        csv_generator(sources, ts_start, ts_end),
         content_type="text/csv",
     )
     response["Content-Disposition"] = 'attachment; filename="export_preview.csv"'
