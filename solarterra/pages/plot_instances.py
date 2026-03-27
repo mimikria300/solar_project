@@ -6,6 +6,119 @@ from solarterra.utils import str_to_dt
 import math
 import datetime as dt
 from pages.figures import scatter, n_trace
+import numpy as np
+
+
+class DBQuery:
+    def __init__(self, dataset, filter_field, t_start, t_stop, fields):
+        # ANNOTATION: dataset is the model-owner instance used to resolve the dynamic Django model class.
+        # instance
+        self.dataset = dataset
+        # ANNOTATION: resolved model class that will be queried for records.
+        # class
+        self.data_class = dataset.dynamic.resolve_class()
+
+        # ANNOTATION: t_start and t_stop are input timestamps converted to bigint bounds for DB filtering.
+        # time strings
+        self.start_limit = ti(t_start)
+        self.stop_limit = ti(t_stop)
+
+        # ANNOTATION: filter_field is the timestamp-like field used in the range WHERE clause.
+        # ANNOTATION: fields is the list of additional variables requested in the query output.
+        # field (instance) on which the filtering happens
+        self.filter_field = filter_field
+        self.fields = fields
+        # 0th position of the filter_field is important
+        self.all_fields = [filter_field] + fields
+
+        # not evaluated queryset
+        self.queryset = None
+        # transposed and sorted arrays of values
+        self.var_arrays = None
+        # sorted arrays of records (timestamp + values)
+        self.record_arrays = None
+
+        # bin mapping over over the array of epochs
+        self.bin_map = None
+
+    def query(self):
+        # ANNOTATION: Build Django range lookup kwargs dynamically using the selected filter field.
+        kwargs = {
+            "{0}__gte".format(self.filter_field): self.start_limit,
+            "{0}__lte".format(self.filter_field): self.stop_limit,
+        }
+        # ANNOTATION: Store a lazy queryset; actual DB evaluation happens when data is consumed.
+        self.queryset = self.data_class.objects.filter(**kwargs)
+
+    def set_var_arrays(self):
+
+        '''
+        Executes queryset, outputs in format:
+        arrays[0] = timestamps, arrays[1:] = field values in same order as fields
+
+        epoch array
+        field value array 1
+        field value array 2
+        ...
+
+        Used in plotting.
+        '''
+
+        # if queryset is not completely empty
+        if self.queryset.exists():
+            rows = self.queryset.values_list(*self.all_fields)
+            pile = np.stack(rows)
+            print("PILE SHAPE", pile.shape)
+            # sort everythong by the first row
+            sorted_pile = pile[pile[:, 0].argsort()]
+
+            # transpose to form arrays
+            self.var_arrays = sorted_pile.T
+
+    def set_record_arrays(self):
+
+        '''
+        Executes queryset, outputs in format:
+        rows[0] = [timestamp, value1, value2, ...]
+        rows[1] = [timestamp, value1, value2, ...]
+        ...
+
+
+        Used in export.
+        '''
+        # if queryset is not completely empty
+        if self.queryset.exists():
+
+            rows = self.queryset.values_list(*self.all_fields)
+            pile = np.stack(rows)
+            print("PILE SHAPE", pile.shape)
+            # sort everythong by the first row
+            sorted_pile = pile[pile[:, 0].argsort()]
+
+            self.record_arrays = sorted_pile
+
+    def get_var_array_len(self):
+        if self.var_arrays is not None:
+            return self.var_arrays[0].shape[0]
+        #maybe u shouldn't call this if var_arrays is None but record_arrays is not None, but just in case
+        elif self.record_arrays is not None:
+            return self.record_arrays.shape[0]
+
+    def get_record_count(self):
+        if self.record_arrays is not None:
+            return self.record_arrays.shape[0]
+        elif self.var_arrays is not None:
+            return self.var_arrays[0].shape[0]
+
+    def get_full_time_array(self):
+        if self.var_arrays is not None:
+            return self.var_arrays[0]
+        elif self.record_arrays is not None:
+            return self.record_arrays[:, 0]
+
+    def set_bin_map(self, bin_starts_array):
+        # ANNOTATION: Map each timestamp to the insertion index of its right-side bin boundary.
+        self.bin_map = np.searchsorted(bin_starts_array, self.get_full_time_array(), side="right")
 
 class Bin():
 
@@ -138,7 +251,7 @@ class Plot():
     def get_y_arrays(self, query):
         for field in self.y_fields:
             field_index = query.all_fields.index(field)
-            full_value_array = query.arrays[field_index]
+            full_value_array = query.var_arrays[field_index]
             
             # only nan values for this variable
             if np.isnan(full_value_array).all():
@@ -159,7 +272,7 @@ class Plot():
         
         for i, field in enumerate(self.y_fields):
             field_index = query.all_fields.index(field)
-            full_value_array = query.arrays[field_index]
+            full_value_array = query.var_arrays[field_index]
 
             # getting an index of nans in value array
             mask = ~np.isnan(full_value_array)
