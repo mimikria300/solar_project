@@ -6,8 +6,7 @@ import pandas as pd
 import numpy as np
 import datetime as dt
 import math
-from pages.plot_instances import Bin, Plot
-from pages.db_query import DBQuery
+from pages.plot_instances import Bin, Plot, DBQuery
 from load_cdf.models import DynamicField
 
 
@@ -40,12 +39,14 @@ def get_plots(variables, t_start, t_end, validate):
         
         # creating the query
         query.query() 
+        has_data = query.queryset.exists()
+        aggregation = False
         # if queryset is not empty        
-        if query.queryset.exists():
+        if has_data:
             # queryset evaluation
-            query.set_arrays()
+            query.set_var_arrays()
             # HERE is the place to decide if there will be binning or not
-            aggregation = True if query.get_array_len() > Bin.PPP else False
+            aggregation = True if query.get_var_array_len() > Bin.PPP else False
 
 
         # need to generate plot spaces, even if there is not data for a plot
@@ -58,7 +59,7 @@ def get_plots(variables, t_start, t_end, validate):
                     validate=validate)
             
             # no computations if there isn`t any data
-            if query.queryset.exists():
+            if has_data:
 
                 if aggregation:
                     plot.prepare_bins(bin_instance)

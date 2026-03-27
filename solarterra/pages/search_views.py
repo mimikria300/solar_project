@@ -11,14 +11,14 @@ import csv
 from pages.plotting import get_plots
 from pages.export import csv_generator
 
-def _default_source_initial():
+def _default_time_interval():
     return {
         "ts_start": dt.datetime(year=2013, month=1, day=1, hour=1),
         "ts_end": dt.datetime(year=2013, month=12, day=30, hour=1),
     }
 
 
-def _render_sources(request, *, source_form, plot_form, export_form, fresh=False, status=200):
+def _render_sources(request, *, source_form, plot_form, export_form, fresh=False):
     context = {
         "datasets": Dataset.objects.have_data().order_by("tag"),
         "source_form": source_form,
@@ -26,7 +26,7 @@ def _render_sources(request, *, source_form, plot_form, export_form, fresh=False
         "export_form": export_form,
         "fresh": fresh,
     }
-    return render(request, "pages/sources.html", context=context, status=status)
+    return render(request, "pages/sources.html", context=context)
 
 
 def search(request):
@@ -36,7 +36,7 @@ def search(request):
 
     return _render_sources(
         request,
-        source_form=SourceForm(initial=_default_source_initial()),
+        source_form=SourceForm(initial=_default_time_interval()),
         plot_form=PlotForm(),
         export_form=ExportForm(),
         fresh=True,
@@ -49,20 +49,21 @@ class Echo:
     def write(self, value):
         return value
 
-def _csv_preview_stream(ts_start, ts_end, sources):
+# def _csv_preview_stream(ts_start, ts_end, sources):
 
-    '''stub for testing the streaming export. It will yield a header and a few rows of data.'''
-    writer = csv.writer(Echo())
-    yield writer.writerow(["timestamp", "note"])
-    yield writer.writerow([ts_start.isoformat(), f"sources={len(sources)}"])
-    yield writer.writerow([ts_end.isoformat(), "streaming export preview"])
+#     '''stub for testing the streaming export. It will yield a header and a few rows of data.'''
+#     writer = csv.writer(Echo())
+#     yield writer.writerow(["timestamp", "note"])
+#     yield writer.writerow([ts_start.isoformat(), f"sources={len(sources)}"])
+#     yield writer.writerow([ts_end.isoformat(), "streaming export preview"])
+
 
 def export(request):
     if request.method != "POST":
         return HttpResponse("Export endpoint expects POST", status=405)
 
-    source_form = SourceForm(data=request.POST)
-    plot_form = PlotForm()  # unbound; only for consistent page rendering on invalid export
+    source_form = SourceForm(data=request.POST) 
+    plot_form = PlotForm(data=request.POST) 
     export_form = ExportForm(data=request.POST)
 
     if not (source_form.is_valid() and export_form.is_valid()):
@@ -72,7 +73,6 @@ def export(request):
             plot_form=plot_form,
             export_form=export_form,
             fresh=False,
-            status=400,
         )
 
     export_format = export_form.cleaned_data["export_format"]
@@ -97,7 +97,7 @@ def plot(request):
 
     source_form = SourceForm(data=request.POST)
     plot_form = PlotForm(data=request.POST)
-    export_form = ExportForm()
+    export_form = ExportForm(data=request.POST)
 
     if not (source_form.is_valid() and plot_form.is_valid()):
         return _render_sources(

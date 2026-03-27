@@ -38,7 +38,7 @@ class CustomCheckboxSelectMultiple(forms.CheckboxSelectMultiple):
 
         return option
 
-
+#SQUIRREL: what EXACTLY does the form collects; it should be just var instances but... i need ликбез on forms.
 class SourceForm(forms.Form):
 
     sources = forms.ModelMultipleChoiceField(
@@ -74,7 +74,7 @@ class PlotForm(forms.Form):
         required=False
     )
 
-
+#FIXME rename button labels to russian
 class ExportForm(forms.Form):
     EXPORT_FORMAT_CHOICES = (
         ("original_cdf", "Original CDF"),
