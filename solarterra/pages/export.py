@@ -1,7 +1,9 @@
 from load_cdf.models import DynamicField
 from solarterra.utils import bigint_ts_resolver as it
 from solarterra.utils import ts_bigint_resolver as ti
+from solarterra.utils import NOW
 import numpy as np
+import datetime
 
 #SQUIRREL: i may want to do the architecture as it is in plotting: two different files -
 # exporting.py for calling export for different options and export_instances.py for building query and headers and format maps
@@ -113,10 +115,6 @@ class DBQuery:
         # ANNOTATION: Map each timestamp to the insertion index of its right-side bin boundary.
         self.bin_map = np.searchsorted(bin_starts_array, self.get_full_time_array(), side="right")
 
-def export_handler(variables):
-    #might as well be inside the export view
-    pass
-
 def csv_generator(variables, ts_start, ts_end): #AKA single file generator. it actually may be packed into the class init
     '''
     Main streaming function to generate CSV data for the given variables and time range.
@@ -125,34 +123,59 @@ def csv_generator(variables, ts_start, ts_end): #AKA single file generator. it a
     NB: works in streaming mode. 
     May later be changed for small data queres and left with a streaming version for bigger ones.
     '''
-    #currently doesnt support multiple files duh, item is actually a  var group for a separate file
-    for item in variables.order_by('dataset__tag').distinct('dataset__tag', 'depend_0'):
-        var_group = variables.filter(dataset=item.dataset, depend_0=item.depend_0).order_by('name')
-        
-        print(f"[EXPORT] Processing dataset: {item.dataset.tag}, depend_0: {item.depend_0}")
 
-        if item.depend_0 is None:
-            print(f"No dependent axis specified for dataset '{item.dataset}'! Skipping")
-            continue
-        
-        # Yield header block for this dataset
-        #FIXME shall be not yielded, i want a plain return
-        # the generator MIGHT yield it row but row but the header-gen must give out the whole header at a time
-        yield from _header_builder(item.dataset, var_group)
-        
-        # Yield data table (labels + rows) for this dataset
-        yield from _table_builder(var_group, item.dataset, item.get_depend_field().field_name, ts_start, ts_end)
-        
-        #TODO: make a footer builder with the OKAY/NOT OKAY flag
-        #yield footer
-        yield f"# End of dataset: {item.dataset.tag}\nSuccess! ✨\n"
+    dataset = variables[0].dataset
+    depend_field = variables[0].get_depend_field()
+    
+    # Yield header block for this dataset
+    #FIXME shall be not yielded, i want a plain return
+    # the generator MIGHT yield it row but row but the header-gen must give out the whole header at a time
+    yield from _header_builder(variables, dataset)
+    
+    # Yield data table (labels + rows) for this dataset
+    yield from _table_builder(variables, dataset, depend_fiels, ts_start, ts_end)
+    
+    yield f"# End of data in the chosen interval for the dataset: {dataset.tag}\nFile generated at {NOW()}"
 
-def _header_builder(dataset, variables):
+def _header_builder(variables, dataset):
     '''Header block for one file.'''
-    yield f"# Dataset: {dataset.tag}\n"
+     
+    # not a tuple, python convention for readability
+    ga = (
+        '#              ************************************\n'
+        '#              *****    GLOBAL ATTRIBUTES    ******\n'
+        '#              ************************************\n'
+        '#\n'
+    )
+
+    match_attributes = dataset.attributes.filter(linked_standard_field__isnull=False)
+    mf_str = ''
+    #render matches like # standard_name: attribute_name = attribute_value
+    #i am not sure mf label matches with fieldname in the model
+    #maybe render all fields from dataset... egh
+    for attr in match_attributes:
+        #not pretty, yet will do fn
+        mf_str += f"#     {attr.linked_standard_field.name.upper()}: {attr.name} = {attr.value}\n"
+    mf_str += '#\n'
+
+    rvv = (
+        '#              ************************************\n'
+        '#              ****  RECORD VARYING VARIABLES  ****\n'
+        '#              ************************************\n'
+        '#\n'
+    )
+    
+    var_desc = ''
+    for i, var in enumerate(variables,1):
+        catdesc = var.catdesc
+        var_desc += f'#   {i}. {catdesc}\n'
+
+    var_desc += '#\n'
+
+    yield ga + mf_str + rvv + var_desc
     
 
-def _table_builder(variables, dataset, filter_field, ts_start, ts_end):
+def _table_builder(variables, dataset, depend_field, ts_start, ts_end):
 
     #CHECKPOINT query building
 
@@ -163,7 +186,7 @@ def _table_builder(variables, dataset, filter_field, ts_start, ts_end):
     
     query = DBQuery(
         dataset=dataset,
-        filter_field=filter_field,
+        filter_field=depend_field,
         t_start=ts_start,
         t_stop=ts_end,
         fields=fields
@@ -171,134 +194,135 @@ def _table_builder(variables, dataset, filter_field, ts_start, ts_end):
     
     query.query()
 
-    #CHECKPOINT building format map
-    format_map, colwidths = _format_map_builder(dyn_fields)
+    #CHECKPOINT getting labels and units
 
-    #CHECKPOINT building label row (colwidth applies)
-    
-
-    yield from _row_generator(query, ts_start, ts_end, format_map=format_map)
-
-def _get_labels(dynfields):
     labels = []
-    for df in dynfields:
+    units = []
+    for df in dyn_fields:
         var_instance = df.variable_instance
         if df.multipart:
             label = var_instance.lablaxis[df.multipart_index - 1]
+            unit = var_instance.unit[df.multipart_index - 1]
         else:
             label = var_instance.lablaxis
+            var_instance.unit
         labels.append(label)
-    return labels
+        units.append(unit)
 
-def _label_row_builder(variables, colwidths):
-    cols = ["timestamp"]
-    for var in variables:
-        dyn_fields = var.dynamic.order_by('multipart_index') #TODO: steal the labels from plotting
-        if dyn_fields.count() == 1:
-            cols.append(var.name)
-        else:
-            for df in dyn_fields:
-                cols.append(f"{var.name}_{df.multipart_index}")
-    yield ",".join(cols) + "\n"
-    #TODO: yield units
-
-def _row_generator(query, ts_start, ts_end, format_map=None):
     
-    #CHECKPOINT query execution and row generation
+    #CHECKPOINT getting formats and DataType instances
 
+    type_and_format_pairs = []
+    for df in dyn_fields:
+        var_instance = df.variable_instance
+        if df.multipart:
+            format_str = var_instance.format[df.multipart_index - 1]
+        else:
+            format_str = var_instance.format
+        type_instance = var_instance.data_type
+        type_and_format.append((type_instance, format_str))
+
+    #CHECKPOINT building format map
+    format_map = _format_map_builder(type_and_format_pairs)
+
+    #CHECKPOINT building colwidths
+    colwidths = []
+    for label, tf_pair, unit in zip(labels, type_and_format_pairs, units):
+        cw = max(len(label), len(unit))
+        type_instance, format_str = tf_pair
+        if type_instance.is_epoch():
+            cw = max(cw, len("YYYY-MM-DD HH:MM:SS"))
+        elif format_str is not None and "i" in format_str.lower():
+            cw = max(cw, int(format_str.lower().strip("i")))
+        elif format_str is not None and "f" in format_str.lower():
+            # this is a bit of a hack, but it gives us a minimum width for floats based on the format string
+            cw = max(cw, int(format_str.lower().strip("f").split(".")[0]))
+        elif format_str is not None and "e" in format_str.lower():
+            # scientific notation can be quite long, so we give it a generous width based on the format string
+            cw = max(cw, int(format_str.lower().strip("e").split(".")[0]) + 5)
+        else:
+            #would be nice to evaluate the length of the string based on the actual data
+            cw = max(cw, 10)
+        colwidths.append(cw+2) #+2 for padding
+
+    #CHECKPOINT: query evaluation
     if query.queryset.exists():
         query.set_record_arrays()
+
+        #CHECKPOINT building label row (colwidth applies)
         
-        # arrays[0] = timestamps, arrays[1:] = field values in same order as fields
-        for i in range(query.get_record_count()):
-            row = query.record_arrays[i]
-            yield _row_formatter(row, format_map=format_map)
+        yield from _label_row_builder(labels, units, colwidths)
+        yield from _row_generator(query, ts_start, ts_end, format_map=format_map)
+    
     else:
-        #SQUIRREL: verification of empty or non-significant data - to the plan
+
+        #SQUIRREL: verification of empty or non-significant data - to the plan; it shall use the exact approach as plotting, but here i print it into the file
         yield f"# No data for the specified time range {ts_start} to {ts_end}\n"
 
 
-def _format_map_builder(dyn_fields):
+    
+
+def _label_row_builder(labels, units, colwidths):
+    lblrow = []
+    unitrow = []
+    for label, unit, cw in zip(labels, units, colwidths):
+        lblrow.append(' '*(cw - len(label)) + label)
+        unitrow.append(' '*(cw - len(unit)) + unit)
+   
+    yield "".join(lblrow) + "\n"
+    yield "".join(unitrow) + "\n"
+
+def _row_generator(query, ts_start, ts_end, format_map=None):
+    
+    #CHECKPOINT row generation
+    
+    # arrays[0] = timestamps, arrays[1:] = field values in same order as fields
+    for i in range(query.get_record_count()):
+        row = query.record_arrays[i]
+        yield _row_formatter(row, format_map=format_map)
+        
+
+def _row_formatter(row, format_map, colwidths):
+    '''format map application to a row, then conversion to CSV string.'''
+
+    formatted_row = []
+    for value, formatter, cw in zip(row, format_map, colwidths):
+        formatted_value = formatter(value)
+        # add padding based on colwidth
+        formatted_value = ' '*(cw - len(formatted_value)) + formatted_value
+        formatted_row.append(formatted_value)
+
+    return "".join(formatted_row) + "\n"
+
+def _format_map_builder(type_and_format_pairs):
     '''Build a list of formatter functions corresponding to the fields.'''
 
     format_map = []
-    colwidths = []
-    for df in dyn_fields:
-        var_instance = df.variable_instance
-        
-        format_str = var_instance.format
-        if df.multipart:
-            label = var_instance.lablaxis[df.multipart_index - 1]
-        else:
-            label = var_instance.lablaxis
+    for type_instance, format_str in type_and_format_pairs:
 
         #CHECKPOINT pasrse format_str and build formatter function
-        #depends on datatype and actuall string??? i mean
-        #epoch is none but shall output as timestamp
-        #float is either fortran or scientific
-        #everything else is fallback 
-        #ok it shal eat var instance
 
-        formatter = make_formatter(var_instance)
+        formatter = make_format_function(type_instance, format_str)
         format_map.append(formatter)
-
-        colwidth = max(len(label), len(format_str))+2 # +2 for padding
-        colwidths.append(colwidth)
         
-    return format_map, colwidths
+    return format_map
 
-def _row_formatter(row, format_map=None):
-    '''format map application to a row, then conversion to CSV string.'''
-
-    if format_map is None:
-        format_map = [str] * len(row)
-    formatted_row = []
-    for item, f in zip(row, format_map):
-        formatted_row.append(f(item))
-
-    #CHECKPOINT use colwidths to add padding to the formatted items, for now just join with comma
-    return ",".join(formatted_row) + "\n"
-
- # ====== FORMATTERS ======
-
-# ===FORMATTERS===
-#mmmmhhh closures i guess
-def make_formatter(var):
+#might be generated for the dynamic field and stored there for formatting consistency!
+def make_format_function(type_instance, format_str):
     '''Factory for field-specific formatter functions.'''
-    if var.format is None:
-        return _format_fallback
     
-    if dyn_field.field_name == "timestamp": #ugh it's not the correct firldname for that
-        return _format_timestamp
-    # elif dyn_field.field_name in int_fields:
-    #     return _format_int
-    # elif dyn_field.field_name in float_fortran_fields:
-    #     return _format_float_fortran
-    # elif dyn_field.field_name in float_scientific_fields:
-    #     return _format_float_scientific
+    if type_instance.is_epoch():
+        #nb: the current uploader is ommiting milliseconds completely (it rounds the timestamps to seconds)
+        return lambda x: it(x).strftime("%Y-%m-%d %H:%M:%S") if x is not None else ""
+    elif format_str is not None and "i" in format_str.lower():
+        #i is usually for year/day/etc, doesn't really need to be zero-padded; added as a place to add different bechavior for int types if needed
+        return lambda x: str(x) if x is not None else ""
+    elif format_str is not None and "f" in format_str.lower():
+        return lambda x: f"{x:.{format_str.lower().strip('f')}f}" if x is not None else ""
+    elif format_str is not None and "e" in format_str.lower():
+        #scientific float formatter
+        return lambda x: f"{x:.{format_str.lower().strip('e')}e}" if x is not None else ""
     else:
-        return _format_fallback
-
-def format_timestamp(value):
-    '''Format bigint-like timestamp values using the project resolver.'''
-    if value is None:
-        return ""
-    return str(it(value))
-
-def format_int(value):
-    pass
-
-def format_float_fortran(value):
-    pass
-
-def format_float_scientific(value):
-    pass
-
-def format_fallback(value):
-    '''Fallback formatter for numeric exports with safe empty handling.'''
-    if value is None:
-        return ""
-    if np.isscalar(value) and np.isnan(value):
-        return ""
-    return str(value)
+        #fallback
+        return lambda x: str(x) if x is not None else ""
 

@@ -82,8 +82,22 @@ def export(request):
 
     if export_format != "csv": return HttpResponse("Only csv is implemented for now", status=501)
 
+    example_var_per_file = sources.order_by('dataset__tag').distinct('dataset__tag', 'depend_0')
+
+    #will be wired up for other groups later like that:
+    #for item in var_groups_per_file:
+    
+    item = example_var_per_file[0]
+    var_group = sources.filter(dataset=item.dataset, depend_0=item.depend_0).order_by('name')
+    
+    print(f"[EXPORT] Processing dataset: {item.dataset.tag}, depend_0: {item.depend_0}")
+    if item.depend_0 is None:
+        print(f"No dependent axis specified for dataset '{item.dataset.tag}'! Skipping")
+        #continue
+        return HttpResponse(f"Dataset '{item.dataset.tag}' has no dependent axis specified! Cannot export.", status=400)
+
     response = StreamingHttpResponse(
-        csv_generator(sources, ts_start, ts_end),
+        csv_generator(var_group, ts_start, ts_end),
         content_type="text/csv",
     )
     response["Content-Disposition"] = 'attachment; filename="export_preview.csv"'
