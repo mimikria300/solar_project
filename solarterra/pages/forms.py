@@ -79,7 +79,7 @@ class ExportForm(forms.Form):
     EXPORT_FORMAT_CHOICES = (
         ("original_cdf", "Original CDF"),
         ("clean_cdf", "Clean CDF"),
-        ("csv", "CSV"),
+        ("plain_text", "Plain Text"),
     )
 
     export_format = forms.ChoiceField(
