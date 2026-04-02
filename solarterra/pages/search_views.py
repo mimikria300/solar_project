@@ -9,7 +9,7 @@ import datetime as dt
 import csv
 
 from pages.plotting import get_plots
-from pages.export import csv_generator
+from pages.export import plain_text_generator
 
 def _default_time_interval():
     return {
@@ -80,7 +80,7 @@ def export(request):
     ts_start = source_form.cleaned_data["ts_start"]
     ts_end = source_form.cleaned_data["ts_end"]
 
-    if export_format != "csv": return HttpResponse("Only csv is implemented for now", status=501)
+    if export_format != "plain_text": return HttpResponse("Only plain_text is implemented for now", status=501)
 
     example_var_per_file = sources.order_by('dataset__tag').distinct('dataset__tag', 'depend_0')
 
@@ -97,10 +97,10 @@ def export(request):
         return HttpResponse(f"Dataset '{item.dataset.tag}' has no dependent axis specified! Cannot export.", status=400)
 
     response = StreamingHttpResponse(
-        csv_generator(var_group, ts_start, ts_end),
-        content_type="text/csv",
+        plain_text_generator(var_group, ts_start, ts_end),
+        content_type="text/plain",
     )
-    response["Content-Disposition"] = 'attachment; filename="export_preview.csv"'
+    response["Content-Disposition"] = 'attachment; filename="export_preview.txt"'
     return response
 
 #BOOKMARK plotting stuff
