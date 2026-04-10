@@ -1,7 +1,13 @@
 ./configs/settings.json
-./solarterra_submodules/data_cdf/migrations
-./solarterra_submodules/data_cdf/models
 __pycache__/
 *.pyc
 *.pyo
 configs/settings.json
+
+# Generated data_cdf migrations
+solarterra_submodules/data_cdf/migrations/*.py
+!solarterra_submodules/data_cdf/migrations/__init__.py
+
+# Generated data_cdf model/dataclass files
+solarterra_submodules/data_cdf/models/*.py
+!solarterra_submodules/data_cdf/models/__init__.py

@@ -1,21 +1,32 @@
 from django.shortcuts import render
 from load_cdf.models import *
 from data_cdf.models import *
-from django.http import Http404, HttpResponse, StreamingHttpResponse
+from django.http import Http404, HttpResponse, StreamingHttpResponse, FileResponse
 from django.apps import apps
 
 from pages.forms import SourceForm, PlotForm, ExportForm
 import datetime as dt
-import csv
+import csv, shutil, os, tempfile, zipfile
+
 
 from pages.plotting import get_plots
 from pages.export import plain_text_generator
 
-def _default_time_interval():
-    return {
+DEFAULT_TIME_INTERVALS = {
+    "test": {
+        "ts_start": dt.datetime(year=2013, month=1, day=3, hour=0, minute=0),
+        "ts_end": dt.datetime(year=2013, month=1, day=10, hour=0, minute=0),
+    },
+    "production": {
         "ts_start": dt.datetime(year=2013, month=1, day=1, hour=1),
         "ts_end": dt.datetime(year=2013, month=12, day=30, hour=1),
-    }
+    },
+}
+
+#the time interval pre-set in the time selector widget; switch made for testing convenience
+def _default_time_interval():
+    return DEFAULT_TIME_INTERVALS["test"].copy()
+    #return DEFAULT_TIME_INTERVALS["production"].copy()
 
 
 def _render_sources(request, *, source_form, plot_form, export_form, fresh=False):
@@ -42,21 +53,10 @@ def search(request):
         fresh=True,
     )
 
-#PIN export stuff
-#BOOKMARK export stuff
-class Echo:
-    # csv.writer expects a file-like object with write(); return value is streamed chunk
-    def write(self, value):
-        return value
-
-# def _csv_preview_stream(ts_start, ts_end, sources):
-
-#     '''stub for testing the streaming export. It will yield a header and a few rows of data.'''
-#     writer = csv.writer(Echo())
-#     yield writer.writerow(["timestamp", "note"])
-#     yield writer.writerow([ts_start.isoformat(), f"sources={len(sources)}"])
-#     yield writer.writerow([ts_end.isoformat(), "streaming export preview"])
-
+# class Echo:
+#     # csv.writer expects a file-like object with write(); return value is streamed chunk
+#     def write(self, value):
+#         return value
 
 def export(request):
     if request.method != "POST":
@@ -80,30 +80,73 @@ def export(request):
     ts_start = source_form.cleaned_data["ts_start"]
     ts_end = source_form.cleaned_data["ts_end"]
 
+    print(
+        f"[EXPORT] Request accepted. format={export_format}, sources={sources.count()}, "
+        f"ts_start={ts_start}, ts_end={ts_end}"
+    )
+
     if export_format != "plain_text": return HttpResponse("Only plain_text is implemented for now", status=501)
 
-    example_var_per_file = sources.order_by('dataset__tag').distinct('dataset__tag', 'depend_0')
+    #quiery containing vars distinct by dataset tag and depend_0
+    example_var_per_file = list(sources.order_by('dataset__tag').distinct('dataset__tag', 'depend_0'))
 
-    #will be wired up for other groups later like that:
-    #for item in var_groups_per_file:
+    print(f"[EXPORT] Distinct file groups: {len(example_var_per_file)}")
 
-    item = example_var_per_file[0]
-    var_group = sources.filter(dataset=item.dataset, depend_0=item.depend_0).order_by('name')
+    if len(example_var_per_file) == 1:
 
-    print(f"[EXPORT] Processing dataset: {item.dataset.tag}, depend_0: {item.depend_0}")
-    if item.depend_0 is None:
-        print(f"No dependent axis specified for dataset '{item.dataset.tag}'! Skipping")
-        #continue
-        return HttpResponse(f"Dataset '{item.dataset.tag}' has no dependent axis specified! Cannot export.", status=400)
+        item = example_var_per_file[0]
+        dataset = item.dataset
+        filename = f"{item.dataset.tag}_{item.depend_0}.txt"
+        var_group = sources.filter(dataset=item.dataset, depend_0=item.depend_0).order_by('name')
 
-    response = StreamingHttpResponse(
-        plain_text_generator(var_group, ts_start, ts_end),
-        content_type="text/plain",
-    )
-    response["Content-Disposition"] = 'attachment; filename="export_preview.txt"'
+        print(f"[EXPORT] Single file streaming. Dataset: {item.dataset.tag}, depend_0: {item.depend_0}")
+
+        print(f"[EXPORT] Streaming plain text file for dataset={dataset.tag}, depend_0={var_group[0].depend_0}, variables={len(var_group)}")
+        response = StreamingHttpResponse(
+            plain_text_generator(var_group, ts_start, ts_end),
+            content_type="text/plain",
+        )
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+
+    else: #safe, it's not zero, data is cleaned and form is verified
+
+        print(f"[EXPORT] Multiple variable groups detected. Exporting each group as a separate file, expected filecount: {len(example_var_per_file)}")
+        zip_timestamp = dt.datetime.now().strftime("%Y-%d-%m-%H-%M")
+        zip_filename = f"exported_data_{zip_timestamp}.zip"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            export_dir = os.path.join(temp_dir, "exported_data")
+            os.makedirs(export_dir, exist_ok=True)
+
+            print(f"[EXPORT] Temp export dir: {export_dir}")
+
+            for item in example_var_per_file:
+                print(f"[EXPORT] Processing variable group: {item.dataset.tag} {item.depend_0}")
+                var_group = sources.filter(dataset=item.dataset, depend_0=item.depend_0).order_by('name')
+                filename = f"{item.dataset.tag}_{item.depend_0}.txt"
+                filepath = os.path.join(export_dir, filename)
+
+                with open(filepath, 'w', encoding='utf-8') as file_handle:
+                    for line in plain_text_generator(var_group, ts_start, ts_end):
+                        file_handle.write(line)
+
+                print(f"[EXPORT] Wrote file: {filepath}")
+
+            archive_base = os.path.join(temp_dir, "exported_data")
+            resulting_zip_path = shutil.make_archive(archive_base, 'zip', export_dir)
+
+            print(f"[EXPORT] Zip created: {resulting_zip_path}")
+
+            with open(resulting_zip_path, 'rb') as zip_handle:
+                zip_bytes = zip_handle.read()
+
+            print(f"[EXPORT] Zip size in bytes: {len(zip_bytes)}")
+
+            response = HttpResponse(zip_bytes, content_type="application/zip")
+            response["Content-Disposition"] = f'attachment; filename="{zip_filename}"'
+            response["Content-Length"] = len(zip_bytes)
+
     return response
 
-#BOOKMARK plotting stuff
 
 def plot(request):
     if request.method != "POST":
