@@ -11,20 +11,15 @@ import numpy as np
 
 class DBQuery:
     def __init__(self, dataset, filter_field, t_start, t_stop, fields):
-        # ANNOTATION: dataset is the model-owner instance used to resolve the dynamic Django model class.
         # instance
         self.dataset = dataset
-        # ANNOTATION: resolved model class that will be queried for records.
         # class
         self.data_class = dataset.dynamic.resolve_class()
 
-        # ANNOTATION: t_start and t_stop are input timestamps converted to bigint bounds for DB filtering.
         # time strings
         self.start_limit = ti(t_start)
         self.stop_limit = ti(t_stop)
 
-        # ANNOTATION: filter_field is the timestamp-like field used in the range WHERE clause.
-        # ANNOTATION: fields is the list of additional variables requested in the query output.
         # field (instance) on which the filtering happens
         self.filter_field = filter_field
         self.fields = fields
@@ -42,12 +37,10 @@ class DBQuery:
         self.bin_map = None
 
     def query(self):
-        # ANNOTATION: Build Django range lookup kwargs dynamically using the selected filter field.
         kwargs = {
             "{0}__gte".format(self.filter_field): self.start_limit,
             "{0}__lte".format(self.filter_field): self.stop_limit,
         }
-        # ANNOTATION: Store a lazy queryset; actual DB evaluation happens when data is consumed.
         self.queryset = self.data_class.objects.filter(**kwargs)
 
     def set_var_arrays(self):
@@ -117,7 +110,6 @@ class DBQuery:
             return self.record_arrays[:, 0]
 
     def set_bin_map(self, bin_starts_array):
-        # ANNOTATION: Map each timestamp to the insertion index of its right-side bin boundary.
         self.bin_map = np.searchsorted(bin_starts_array, self.get_full_time_array(), side="right")
 
 class Bin():
@@ -139,7 +131,6 @@ class Bin():
     def t_previous(self, t_current):
         #print(f"in t_prev : {t_current}, {t_current - self.bin_td}")
         return t_current - self.bin_td
-
 
 class Plot():
 
@@ -341,4 +332,3 @@ class Plot():
             self.figure = scatter(self)
         else:
             self.figure = n_trace(self)
-

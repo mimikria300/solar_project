@@ -77,9 +77,9 @@ class PlotForm(forms.Form):
 #FIXME rename button labels to russian
 class ExportForm(forms.Form):
     EXPORT_FORMAT_CHOICES = (
+        ("plain_text", "Plain Text"),
         ("original_cdf", "Original CDF"),
         ("clean_cdf", "Clean CDF"),
-        ("plain_text", "Plain Text"),
     )
 
     export_format = forms.ChoiceField(

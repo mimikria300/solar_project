@@ -6,7 +6,7 @@ import pandas as pd
 import numpy as np
 import datetime as dt
 import math
-from pages.plot_instances import Bin, Plot, DBQuery
+from pages.datawork_instances import Bin, Plot, DBQuery
 from load_cdf.models import DynamicField
 
 

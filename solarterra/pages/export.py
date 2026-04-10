@@ -5,6 +5,9 @@ from solarterra.utils import NOW
 import numpy as np
 import datetime
 
+from pages.datawork_instances import Bin, DBQuery
+
+FORCE_AGGREGATION = True
 
 GLOBAL_ATTRIBUTE_MAP = [
     ("MISSION", "mission"),
@@ -19,119 +22,10 @@ GLOBAL_ATTRIBUTE_MAP = [
     ("PI_AFFILIATION", "pi_affiliation"),
 ]
 
-#SQUIRREL: i may want to do the architecture as it is in plotting: two different files -
-# exporting.py for calling export for different options and export_instances.py for building query and headers and format maps
-# i mean, underscore functions clearly could be organized as class methods, and it's easier to pass objects around
-# tho it ruins stream approach, isn't it? unless we add a write() method for data_table class and call it instead of using Echo 
 
-#note: yes it is a copy of db query from plotting, but the export and plotting are two separate modules and i want to keep them that way
-class DBQuery:
-    def __init__(self, dataset, filter_field, t_start, t_stop, fields):
-        # instance
-        self.dataset = dataset
-        # class
-        self.data_class = dataset.dynamic.resolve_class()
-
-        # time strings
-        self.start_limit = ti(t_start)
-        self.stop_limit = ti(t_stop)
-
-        # field (instance) on which the filtering happens
-        self.filter_field = filter_field
-        self.fields = fields
-        # 0th position of the filter_field is important
-        self.all_fields = [filter_field] + fields
-
-        # not evaluated queryset
-        self.queryset = None
-        # transposed and sorted arrays of values
-        self.var_arrays = None
-        # sorted arrays of records (timestamp + values)
-        self.record_arrays = None
-
-        # bin mapping over over the array of epochs
-        self.bin_map = None
-
-    def query(self):
-        kwargs = {
-            "{0}__gte".format(self.filter_field): self.start_limit,
-            "{0}__lte".format(self.filter_field): self.stop_limit,
-        }
-        self.queryset = self.data_class.objects.filter(**kwargs)
-
-    def set_var_arrays(self):
-        
-        '''
-        Executes queryset, outputs in format:
-        arrays[0] = timestamps, arrays[1:] = field values in same order as fields
-
-        epoch array
-        field value array 1
-        field value array 2
-        ...
-
-        Used in plotting.
-        '''    
-
-        # if queryset is not completely empty
-        if self.queryset.exists():
-            rows = self.queryset.values_list(*self.all_fields)
-            pile = np.stack(rows)
-            print("PILE SHAPE", pile.shape)
-            # sort everythong by the first row
-            sorted_pile = pile[pile[:, 0].argsort()]
-            
-            # transpose to form arrays
-            self.var_arrays = sorted_pile.T
-
-    def set_record_arrays(self):
-
-        '''
-        Executes queryset, outputs in format:
-        rows[0] = [timestamp, value1, value2, ...]
-        rows[1] = [timestamp, value1, value2, ...]
-        ...
-
-
-        Used in export.
-        '''
-        # if queryset is not completely empty
-        if self.queryset.exists():
-
-            rows = self.queryset.values_list(*self.all_fields)
-            pile = np.stack(rows)
-            print("PILE SHAPE", pile.shape)
-            # sort everythong by the first row
-            sorted_pile = pile[pile[:, 0].argsort()]
-
-            self.record_arrays = sorted_pile
-
-    def get_var_array_len(self):
-        if self.var_arrays is not None:
-            return self.var_arrays[0].shape[0]
-        #maybe u shouldn't call this if var_arrays is None but record_arrays is not None, but just in case
-        elif self.record_arrays is not None:
-            return self.record_arrays.shape[0]
-    
-    def get_record_count(self):
-        if self.record_arrays is not None:
-            return self.record_arrays.shape[0]
-        elif self.var_arrays is not None:
-            return self.var_arrays[0].shape[0]
-
-    def get_full_time_array(self):
-        if self.var_arrays is not None:
-            return self.var_arrays[0]
-        elif self.record_arrays is not None:
-            return self.record_arrays[:, 0]
-
-    def set_bin_map(self, bin_starts_array):
-        # ANNOTATION: Map each timestamp to the insertion index of its right-side bin boundary.
-        self.bin_map = np.searchsorted(bin_starts_array, self.get_full_time_array(), side="right")
-
-def plain_text_generator(variables, ts_start, ts_end): #AKA single file generator. it actually may be packed into the class init
+def plain_text_generator(variables, ts_start, ts_end):
     '''
-    Main streaming function to generate CSV data for the given variables and time range.
+    Main streaming function to generate data for the given variables and time range.
     Yields header block and rows per dataset.
 
     NB: works in streaming mode. 
@@ -139,6 +33,10 @@ def plain_text_generator(variables, ts_start, ts_end): #AKA single file generato
     '''
 
     dataset = variables[0].dataset
+    print(
+        f"[EXPORT] IN plain_text_generator start. Dataset={dataset.tag}, "
+        f"variables num={len(variables)}, ts_start={ts_start}, ts_end={ts_end}"
+    )
     
     # Yield header block for this dataset
     yield from _header_builder(variables, dataset)
@@ -221,6 +119,10 @@ def _table_builder(variables, dataset, ts_start, ts_end):
     dyn_fields_q = DynamicField.objects.filter(variable_instance__in=variables).order_by('variable_instance__name', 'multipart_index')
     dyn_fields = list(dyn_fields_q.all())
     fields = [df.field_name for df in dyn_fields]
+    print(
+        f"[EXPORT] in _table_builder. dataset={dataset.tag}, depend_field={depend_field.field_name}, "
+        f"dynamic_fields={dyn_fields}"
+    )
     # prepend epoch/depend field so labels, units, formats, colwidths align with record_arrays column order
     # epoch isn't added to fields which are passed to query because it will be added as the filter_field in the query
     dyn_fields = [depend_field] + dyn_fields
@@ -281,7 +183,7 @@ def _table_builder(variables, dataset, ts_start, ts_end):
         cw = max(len(label), len(unit))
         type_instance, format_str = tf_pair
         if type_instance.is_epoch():
-            cw = max(cw, len("YYYY-MM-DD HH-MM-SS-XXX"))
+            cw = max(cw, len("dd-mm-yyyy hh:mm:ss.ms"))
         elif format_str is not None and "i" in format_str.lower():
             cw = max(cw, int(format_str.lower().strip("i")))
         elif format_str is not None and "f" in format_str.lower():
@@ -293,27 +195,51 @@ def _table_builder(variables, dataset, ts_start, ts_end):
             #would be nice to evaluate the length of the string based on the actual data
             cw = max(cw, 10)
         colwidths.append(cw+5) #+5 for padding
+    if not query.queryset.exists():
+        print(f"[EXPORT] Query returned no rows for dataset={dataset.tag}")
+        yield f"# No data for the specified time range {ts_start} to {ts_end}\n"
+        return
 
-    #CHECKPOINT: query evaluation
-    if query.queryset.exists():
+    if not FORCE_AGGREGATION:
         query.set_record_arrays()
+        rows = query.record_arrays
+        print(f"[EXPORT] Query returned rows: {query.get_record_count()}")
 
-        #CHECKPOINT building label row (colwidth applies)
-        
-        yield from _label_row_builder(labels, units, colwidths)
-        yield from _row_generator(query, format_map, colwidths)
-    
     else:
 
-        #SQUIRREL: verification of empty or non-significant data - to the plan; it shall use the exact approach as plotting, but here i print it into the file
-        yield f"# No data for the specified time range {ts_start} to {ts_end}\n"
+        query.set_var_arrays()
+        bin_instance = Bin(ts_start, ts_end)
+        i_start = ti(ts_start)
+        i_stop = ti(ts_end)
+        
+        #extended for the last bin to be calculated properly
+        bin_starts_array = np.arange(
+            i_start,
+            i_stop + (bin_instance.bin_seconds * 2),
+            step=bin_instance.bin_seconds,
+        )
+        bin_centers_array = bin_starts_array + (bin_instance.half_bin)
+        query.set_bin_map(bin_starts_array)
 
+        agg_cols = [bin_centers_array]
+        for var_array in query.var_arrays[1:]:
+            agg_cols.append(_aggregate_var_array(var_array, query.bin_map, bin_centers_array.shape[0]))
 
+        rows = np.stack(agg_cols, axis=1)
+
+        print(
+            f"[EXPORT] Aggregation prep ready. rows={query.get_var_array_len()}, "
+            f"bin_seconds={bin_instance.bin_seconds}, bins={bin_starts_array.shape[0]}, "
+            f"aggregated_rows={rows.shape[0]}"
+        )
+
+    yield from _label_row_builder(labels, units, colwidths)
+    yield from _row_generator(rows, format_map, colwidths)
     
 
 def _label_row_builder(labels, units, colwidths):
-    lblrow = []
-    unitrow = []
+    lblrow = ['#']
+    unitrow = ['#']
     for label, unit, cw in zip(labels, units, colwidths):
         lblrow.append(' '*(cw - len(label)) + label)
         unitrow.append(' '*(cw - len(unit)) + unit)
@@ -321,20 +247,43 @@ def _label_row_builder(labels, units, colwidths):
     yield "".join(lblrow) + "\n"
     yield "".join(unitrow) + "\n"
 
-def _row_generator(query, format_map, colwidths):
-    
-    #CHECKPOINT row generation
+def _row_generator(rows, format_map, colwidths):
     
     # arrays[0] = timestamps, arrays[1:] = field values in same order as fields
-    for i in range(query.get_record_count()):
-        row = query.record_arrays[i]
+    for row in rows:
         yield _row_formatter(row, format_map, colwidths)
+
+
+def _aggregate_var_array(var_array, bin_map, bin_count):
+    var_array = np.asarray(var_array)
+    mask = ~np.isnan(var_array)
+
+    val_bin_map = bin_map[mask] - 1
+    val_array = var_array[mask].astype(float)
+
+    valid_mask = (val_bin_map >= 0) & (val_bin_map < bin_count)
+    val_bin_map = val_bin_map[valid_mask]
+    val_array = val_array[valid_mask]
+
+    result = np.full(bin_count, np.nan)
+    if val_bin_map.shape[0] == 0:
+        return result
+
+    order = np.argsort(val_bin_map)
+    val_bin_map = val_bin_map[order]
+    val_array = val_array[order]
+
+    idx, pos, counts = np.unique(val_bin_map, return_index=True, return_counts=True)
+    sums = np.add.reduceat(val_array, pos)
+    means = sums / counts
+    result[idx] = means
+    return result
         
 
 def _row_formatter(row, format_map, colwidths):
     '''format map application to a row, then conversion to CSV string.'''
 
-    formatted_row = []
+    formatted_row = [" "] #to correct first column padding to the # symbol in labels
     for value, formatter, cw in zip(row, format_map, colwidths):
         formatted_value = formatter(value)
         # add padding based on colwidth
