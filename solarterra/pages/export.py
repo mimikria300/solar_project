@@ -7,8 +7,6 @@ import datetime
 
 from pages.datawork_instances import Bin, DBQuery
 
-FORCE_AGGREGATION = True
-
 GLOBAL_ATTRIBUTE_MAP = [
     ("MISSION", "mission"),
     ("SOURCE_NAME", "source_name"),
@@ -23,13 +21,12 @@ GLOBAL_ATTRIBUTE_MAP = [
 ]
 
 
-def plain_text_generator(variables, ts_start, ts_end):
+def plain_text_generator(variables, ts_start, ts_end, aggregate=False):
     '''
     Main streaming function to generate data for the given variables and time range.
     Yields header block and rows per dataset.
 
     NB: works in streaming mode.
-    May later be changed for small data queres and left with a streaming version for bigger ones.
     '''
 
     dataset = variables[0].dataset
@@ -42,7 +39,7 @@ def plain_text_generator(variables, ts_start, ts_end):
     yield from _header_builder(variables, dataset)
 
     # Yield data table (labels + rows) for this dataset
-    yield from _table_builder(variables, dataset, ts_start, ts_end)
+    yield from _table_builder(variables, dataset, ts_start, ts_end, aggregate)
 
     yield f"# End of data in the chosen interval for the dataset: {dataset.tag}\nFile generated at {NOW()}"
 
@@ -109,7 +106,7 @@ def _render_global_attributes(dataset):
     return ''.join(lines)
 
 
-def _table_builder(variables, dataset, ts_start, ts_end):
+def _table_builder(variables, dataset, ts_start, ts_end, aggregate=False):
 
     depend_field = variables[0].get_depend_field()
 
@@ -200,7 +197,7 @@ def _table_builder(variables, dataset, ts_start, ts_end):
         yield f"# No data for the specified time range {ts_start} to {ts_end}\n"
         return
 
-    if not FORCE_AGGREGATION:
+    if not aggregate:
         query.set_record_arrays()
         rows = query.record_arrays
         print(f"[EXPORT] Query returned rows: {query.get_record_count()}")
