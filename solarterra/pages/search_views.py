@@ -79,15 +79,16 @@ def export(request):
     sources = source_form.cleaned_data["sources"]
     ts_start = source_form.cleaned_data["ts_start"]
     ts_end = source_form.cleaned_data["ts_end"]
+    aggregate = export_form.cleaned_data["aggregate"]
 
     print(
         f"[EXPORT] Request accepted. format={export_format}, sources={sources.count()}, "
-        f"ts_start={ts_start}, ts_end={ts_end}"
+        f"ts_start={ts_start}, ts_end={ts_end}, aggregate: {aggregate}"
     )
 
     if export_format != "plain_text": return HttpResponse("Only plain_text is implemented for now", status=501)
 
-    #quiery containing vars distinct by dataset tag and depend_0
+    #quiery containing a single var from a distinct group filtered by dataset tag and depend_0
     example_var_per_file = list(sources.order_by('dataset__tag').distinct('dataset__tag', 'depend_0'))
 
     print(f"[EXPORT] Distinct file groups: {len(example_var_per_file)}")
@@ -103,7 +104,7 @@ def export(request):
         
         print(f"[EXPORT] Streaming plain text file for dataset={dataset.tag}, depend_0={var_group[0].depend_0}, variables={len(var_group)}")
         response = StreamingHttpResponse(
-            plain_text_generator(var_group, ts_start, ts_end),
+            plain_text_generator(var_group, ts_start, ts_end, aggregate=aggregate),
             content_type="text/plain",
         )
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
@@ -126,7 +127,7 @@ def export(request):
                 filepath = os.path.join(export_dir, filename)
 
                 with open(filepath, 'w', encoding='utf-8') as file_handle:
-                    for line in plain_text_generator(var_group, ts_start, ts_end):
+                    for line in plain_text_generator(var_group, ts_start, ts_end, aggregate=aggregate):
                         file_handle.write(line)
 
                 print(f"[EXPORT] Wrote file: {filepath}")

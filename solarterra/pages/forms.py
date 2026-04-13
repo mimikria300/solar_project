@@ -86,3 +86,4 @@ class ExportForm(forms.Form):
         choices=EXPORT_FORMAT_CHOICES,
         required=True
     )
+    aggregate = forms.BooleanField(required=False, label="Агрегировать данные")

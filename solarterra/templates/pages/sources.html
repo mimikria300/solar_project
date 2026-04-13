@@ -82,8 +82,9 @@
 	<div class="page-title">3. Параметры построения и экспорта</div>
 	<div>
 		<div>{{ plot_form.validate }} <label for="id_validate"> {{ plot_form.validate.label }}</label></div>
-		{{ export_form.export_format }}
-		{{ export_form.errors.export_format }}
+		<div><label for="id_export_format">Формат экспорта:</label> {{ export_form.export_format }}</div>
+		<div>{{ export_form.errors.export_format }}</div>
+		<div>{{ export_form.aggregate }} <label for="id_aggregate"> {{ export_form.aggregate.label }}</label></div>
 	</div>
 
 	<div>
