@@ -1,4 +1,4 @@
-from load_cdf.models import DynamicField
+from load_cdf.models import DynamicField, DataType
 from solarterra.utils import bigint_ts_resolver as it
 from solarterra.utils import ts_bigint_resolver as ti
 from solarterra.utils import NOW
@@ -21,7 +21,7 @@ GLOBAL_ATTRIBUTE_MAP = [
 ]
 
 
-def plain_text_generator(variables, ts_start, ts_end, aggregate=False):
+def plain_text_generator(variables, ts_start, ts_end, aggregate=False, validate=False):
     '''
     Main streaming function to generate data for the given variables and time range.
     Yields header block and rows per dataset.
@@ -39,7 +39,7 @@ def plain_text_generator(variables, ts_start, ts_end, aggregate=False):
     yield from _header_builder(variables, dataset)
 
     # Yield data table (labels + rows) for this dataset
-    yield from _table_builder(variables, dataset, ts_start, ts_end, aggregate)
+    yield from _table_builder(variables, dataset, ts_start, ts_end, aggregate, validate)
 
     yield f"# End of data in the chosen interval for the dataset: {dataset.tag}\nFile generated at {NOW()}"
 
@@ -106,7 +106,7 @@ def _render_global_attributes(dataset):
     return ''.join(lines)
 
 
-def _table_builder(variables, dataset, ts_start, ts_end, aggregate=False):
+def _table_builder(variables, dataset, ts_start, ts_end, aggregate=False, validate=False):
 
     depend_field = variables[0].get_depend_field()
 
@@ -202,6 +202,10 @@ def _table_builder(variables, dataset, ts_start, ts_end, aggregate=False):
         rows = query.record_arrays
         print(f"[EXPORT] Query returned rows: {query.get_record_count()}")
 
+        if validate and rows is not None:
+            # filter out values outside validmin/validmax — blanks them in the output
+            _apply_validation_to_records(rows, dyn_fields[1:])
+
     else:
 
         query.set_var_arrays()
@@ -219,7 +223,10 @@ def _table_builder(variables, dataset, ts_start, ts_end, aggregate=False):
         query.set_bin_map(bin_starts_array)
 
         agg_cols = [bin_centers_array]
-        for var_array in query.var_arrays[1:]:
+        for i, var_array in enumerate(query.var_arrays[1:]):
+            # NaN out-of-range values before aggregation so they don't affect bin means
+            if validate:
+                var_array = _validate_array(var_array, dyn_fields[i + 1])
             agg_cols.append(_aggregate_var_array(var_array, query.bin_map, bin_centers_array.shape[0]))
 
         rows = np.stack(agg_cols, axis=1)
@@ -249,6 +256,77 @@ def _row_generator(rows, format_map, colwidths):
     # arrays[0] = timestamps, arrays[1:] = field values in same order as fields
     for row in rows:
         yield _row_formatter(row, format_map, colwidths)
+
+
+def _get_bounds(variable, dyn_field):
+    '''Resolve validmin/validmax for a single dynamic field, accounting for multipart variables.'''
+    vmin = variable.validmin
+    if vmin is not None and dyn_field.multipart and isinstance(vmin, list):
+        vmin = vmin[dyn_field.multipart_index - 1]
+    vmax = variable.validmax
+    if vmax is not None and dyn_field.multipart and isinstance(vmax, list):
+        vmax = vmax[dyn_field.multipart_index - 1]
+    return vmin, vmax
+
+
+def _validate_array(arr, dyn_field):
+    '''Return a copy of arr with out-of-bounds values set to NaN.
+    Used in the aggregated export path: _aggregate_var_array already skips NaNs,
+    so this effectively excludes invalid points from bin means.'''
+    var = dyn_field.variable_instance
+    vmin_raw, vmax_raw = _get_bounds(var, dyn_field)
+    if vmin_raw is None and vmax_raw is None:
+        return arr
+
+    result = np.array(arr, dtype=float)
+    non_nan = ~np.isnan(result)
+    if not non_nan.any():
+        return result
+    # need a real sample value to cast the string bound to the right numpy type
+    sample = result[non_nan][0]
+
+    if vmin_raw is not None:
+        bound = DataType.proper_type(vmin_raw, sample)
+        if bound is not None:
+            result[result < bound] = np.nan
+    if vmax_raw is not None:
+        bound = DataType.proper_type(vmax_raw, sample)
+        if bound is not None:
+            result[result > bound] = np.nan
+    return result
+
+
+def _apply_validation_to_records(rows, data_dyn_fields):
+    '''Validate the non-aggregated record_arrays in-place.
+    Sets out-of-bounds cells to None so the row formatter renders them as blank.
+    Iterates over data columns (skipping col 0 = epoch).'''
+    for col_idx, df in enumerate(data_dyn_fields, start=1):
+        var = df.variable_instance
+        vmin_raw, vmax_raw = _get_bounds(var, df)
+        if vmin_raw is None and vmax_raw is None:
+            continue
+
+        col = rows[:, col_idx]
+        # cast column to float for numeric comparison
+        float_col = np.array(col, dtype=float)
+        non_nan = ~np.isnan(float_col)
+        if not non_nan.any():
+            continue
+        # need a sample to cast the string bound via DataType.proper_type
+        sample = float_col[non_nan][0]
+
+        invalid = np.zeros(len(col), dtype=bool)
+        if vmin_raw is not None:
+            bound = DataType.proper_type(vmin_raw, sample)
+            if bound is not None:
+                invalid |= float_col < bound
+        if vmax_raw is not None:
+            bound = DataType.proper_type(vmax_raw, sample)
+            if bound is not None:
+                invalid |= float_col > bound
+
+        if invalid.any():
+            rows[:, col_idx] = np.where(invalid, None, col)
 
 
 def _aggregate_var_array(var_array, bin_map, bin_count):
