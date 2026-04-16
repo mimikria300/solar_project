@@ -93,15 +93,10 @@ class DBQuery:
     def get_var_array_len(self):
         if self.var_arrays is not None:
             return self.var_arrays[0].shape[0]
-        #maybe u shouldn't call this if var_arrays is None but record_arrays is not None, but just in case
-        elif self.record_arrays is not None:
-            return self.record_arrays.shape[0]
     
     def get_record_count(self):
         if self.record_arrays is not None:
             return self.record_arrays.shape[0]
-        elif self.var_arrays is not None:
-            return self.var_arrays[0].shape[0]
 
     def get_full_time_array(self):
         if self.var_arrays is not None:

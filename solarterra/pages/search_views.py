@@ -80,10 +80,11 @@ def export(request):
     ts_start = source_form.cleaned_data["ts_start"]
     ts_end = source_form.cleaned_data["ts_end"]
     aggregate = export_form.cleaned_data["aggregate"]
+    validate = export_form.cleaned_data["validate"]
 
     print(
         f"[EXPORT] Request accepted. format={export_format}, sources={sources.count()}, "
-        f"ts_start={ts_start}, ts_end={ts_end}, aggregate: {aggregate}"
+        f"ts_start={ts_start}, ts_end={ts_end}, aggregate: {aggregate}, validate: {validate}"
     )
 
     if export_format != "plain_text": return HttpResponse("Only plain_text is implemented for now", status=501)
@@ -104,7 +105,7 @@ def export(request):
         
         print(f"[EXPORT] Streaming plain text file for dataset={dataset.tag}, depend_0={var_group[0].depend_0}, variables={len(var_group)}")
         response = StreamingHttpResponse(
-            plain_text_generator(var_group, ts_start, ts_end, aggregate=aggregate),
+            plain_text_generator(var_group, ts_start, ts_end, aggregate=aggregate, validate=validate),
             content_type="text/plain",
         )
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
@@ -127,7 +128,7 @@ def export(request):
                 filepath = os.path.join(export_dir, filename)
 
                 with open(filepath, 'w', encoding='utf-8') as file_handle:
-                    for line in plain_text_generator(var_group, ts_start, ts_end, aggregate=aggregate):
+                    for line in plain_text_generator(var_group, ts_start, ts_end, aggregate=aggregate, validate=validate):
                         file_handle.write(line)
 
                 print(f"[EXPORT] Wrote file: {filepath}")

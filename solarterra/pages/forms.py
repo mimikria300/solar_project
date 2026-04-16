@@ -87,3 +87,7 @@ class ExportForm(forms.Form):
         required=True
     )
     aggregate = forms.BooleanField(required=False, label="Агрегировать данные")
+    validate = forms.BooleanField(
+        label="Валидировать данные",
+        required=False
+    )
