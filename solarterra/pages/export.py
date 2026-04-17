@@ -207,3 +207,5 @@ def make_format_function(type_instance, format_str):
         #fallback
         return lambda x: str(x) if x is not None else ""
 
+def clean_cdf_generator(variables, ts_start, ts_end, aggregate=False, validate=False):
+    pass

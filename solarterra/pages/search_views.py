@@ -87,28 +87,46 @@ def export(request):
         f"ts_start={ts_start}, ts_end={ts_end}, aggregate: {aggregate}, validate: {validate}"
     )
 
-    if export_format != "plain_text": return HttpResponse("Only plain_text is implemented for now", status=501)
+    #CHECKPOINT make flag switcher
+    if export_format not in ["plain_text", "cleaned_cdf"]: return HttpResponse("Original CDF export is not implemented for now", status=501)
 
+    # CHECKPOINT flag for multifile branching
     #quiery containing a single var from a distinct group filtered by dataset tag and depend_0
     example_var_per_file = list(sources.order_by('dataset__tag').distinct('dataset__tag', 'depend_0'))
-
     print(f"[EXPORT] Distinct file groups: {len(example_var_per_file)}")
+    multifile_export = len(example_var_per_file) > 1
 
-    if len(example_var_per_file) == 1:
 
-        item = example_var_per_file[0]
-        dataset = item.dataset
-        filename = f"{item.dataset.tag}_{item.depend_0}.txt"
-        var_group = sources.filter(dataset=item.dataset, depend_0=item.depend_0).order_by('name')
+    if not multifile_export:
+
+        example = example_var_per_file[0]
+        dataset = example.dataset
+        var_group = sources.filter(dataset=example.dataset, depend_0=example.depend_0).order_by('name')
         
-        print(f"[EXPORT] Single file streaming. Dataset: {item.dataset.tag}, depend_0: {item.depend_0}")
-        
-        print(f"[EXPORT] Streaming plain text file for dataset={dataset.tag}, depend_0={var_group[0].depend_0}, variables={len(var_group)}")
-        response = StreamingHttpResponse(
-            plain_text_generator(var_group, ts_start, ts_end, aggregate=aggregate, validate=validate),
+        print(f"[EXPORT] Single file streaming. Dataset: {example.dataset.tag}, depend_0: {example.depend_0}")
+        #CHECKPOINT here goes cdf/plaitext switch
+
+        if export_format == "plain_text":
+            filename = f"{example.dataset.tag}_{example.depend_0}.txt"
+            
+            print(f"[EXPORT] Streaming plain text file for dataset={dataset.tag}, depend_0={var_group[0].depend_0}, variables={len(var_group)}")
+            response = StreamingHttpResponse(
+                plain_text_generator(var_group, ts_start, ts_end, aggregate=aggregate, validate=validate),
             content_type="text/plain",
-        )
-        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+            )
+            response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        elif export_format == "cleaned_cdf":
+
+            #FIXME: some nice naming will be nice
+            filename = f"{example.dataset.tag}_{example.depend_0}.cdf"
+
+            print(f"[EXPORT] Streaming cleaned CDF file for dataset={dataset.tag}, depend_0={var_group[0].depend_0}, variables={len(var_group)}")
+            response = StreamingHttpResponse(
+                clean_cdf_generator(var_group, ts_start, ts_end, aggregate=aggregate, validate=validate),
+                content_type="application/vnd.iki_ran.cdf")
+            response["Content-Disposition"] = f'attachment; filename="{filename}"'
+
+
 
     else: #safe, it's not zero, data is cleaned and form is verified
 
@@ -124,12 +142,21 @@ def export(request):
             for item in example_var_per_file:
                 print(f"[EXPORT] Processing variable group: {item.dataset.tag} {item.depend_0}")
                 var_group = sources.filter(dataset=item.dataset, depend_0=item.depend_0).order_by('name')
-                filename = f"{item.dataset.tag}_{item.depend_0}.txt"
-                filepath = os.path.join(export_dir, filename)
+                
+                if export_format == "plain_text":
+                    filename = f"{item.dataset.tag}_{item.depend_0}.txt"
+                    filepath = os.path.join(export_dir, filename)
+                    with open(filepath, 'w', encoding='utf-8') as file_handle:
+                        for line in plain_text_generator(var_group, ts_start, ts_end, aggregate=aggregate, validate=validate):
+                            file_handle.write(line)
+                
+                elif export_format == "cleaned_cdf":
+                    #CHECKPOINT actual logic for cleaned cdf export; for now just a stub
+                    filename = f"{item.dataset.tag}_{item.depend_0}.cdf"
+                    filepath = os.path.join(export_dir, filename)
 
-                with open(filepath, 'w', encoding='utf-8') as file_handle:
-                    for line in plain_text_generator(var_group, ts_start, ts_end, aggregate=aggregate, validate=validate):
-                        file_handle.write(line)
+                    #CHECKPOINT write cdf object to file i guess
+                    return HttpResponse("IN MULTIFILE CLEANED CDF", status=501)
 
                 print(f"[EXPORT] Wrote file: {filepath}")
 

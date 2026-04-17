@@ -78,8 +78,9 @@ class PlotForm(forms.Form):
 class ExportForm(forms.Form):
     EXPORT_FORMAT_CHOICES = (
         ("plain_text", "Plain Text"),
-        ("original_cdf", "Original CDF"),
         ("clean_cdf", "Clean CDF"),
+        ("original_cdf", "Original CDF"),
+        
     )
 
     export_format = forms.ChoiceField(
