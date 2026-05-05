@@ -382,6 +382,14 @@ class Variable(models.Model):
             if depend_var is not None and depend_var.dynamic.count() == 1:
                 return depend_var.dynamic.first()
 
+    def get_depend_var(self):
+        if self.depend_0 is not None:
+            depend_var = self.dataset.variables.get(name=self.depend_0)
+            return depend_var
+
+    def get_data_type_instance(self):
+        return DataType.objects.get(cdf_file_label=self.datatype)
+
     def get_numpy_data_type(self):
         field_instance = self.dynamic.first()
         if field_instance is not None:

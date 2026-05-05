@@ -89,6 +89,12 @@
 	<div class="page-title">3. Параметры построения и экспорта</div>
 
 	<div>
+		<div>{{ export_form.aggregate }} <label for="id_aggregate"> {{ export_form.aggregate.label }}</label></div>
+		<div><label for="id_export_format">Формат экспорта:</label> {{ export_form.export_format }}</div>
+		<div>{{ export_form.errors.export_format }}</div>
+	</div>
+
+	<div>
 		<button class="btn" type="submit" formaction="{% url 'plot' %}" formtarget="_blank">Поcтроить</button>
 		<button class="btn" type="submit" formaction="{% url 'export' %}" formtarget="_blank">Экспортировать данные</button>
 	</div>
