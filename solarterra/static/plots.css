@@ -19,5 +19,30 @@ label:hover {
 }
 
 .no_data {
+    display: flex;
+    justify-content: center;
+    align-items: center;
     padding: 3rem 0;
+}
+
+.plot-wrapper {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 300px; 
+    align-items: start;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 1rem;
+}
+
+.plot-chart {
+    width: 100%;
+    overflow: hidden;
+}
+
+.plot-info {
+    font-size: 0.9rem;
+    line-height: 1.5;
+    background: #f9f9f9;
+    padding: 1rem;
+    border-radius: 8px;
 }

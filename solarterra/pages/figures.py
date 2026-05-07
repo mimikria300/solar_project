@@ -21,6 +21,8 @@ def scatter(plot):
         xaxis_range=[plot.t_start, plot.t_stop],
         yaxis_title=plot.variable.get_axis_label(),
         xaxis_domain=XAXIS_DOMAIN,
+        margin=dict(l=0, r=0, t=0, b=0),
+        autosize=True,
     )
 
 
@@ -64,6 +66,8 @@ def n_trace(plot):
         height=700,
         #xaxis_range=[ts[0], ts[1]],
         showlegend=False,
+        margin=dict(l=0, r=0, t=0, b=0),
+        autosize=True,
     )
 
     config = {'displayModeBar': False}
@@ -127,6 +131,8 @@ def spectrogram(plot):
         xaxis_range=[plot.t_start, plot.t_stop],
         xaxis_domain=XAXIS_DOMAIN,
         height=500,
+        margin=dict(l=0, r=0, t=0, b=0),
+        autosize=True,
     )
 
     if plot.y_scaletyp == 'log':
