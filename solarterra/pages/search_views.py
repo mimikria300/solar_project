@@ -11,8 +11,10 @@ import tempfile, os, shutil
 
 from pages.plotting import get_plots
 from pages.export import plain_text_generator
+from pages.export_instances import DBQuery, PlainTextMeta, Bin
 
-def _default_source_initial():
+#helper functions for search_view
+def _default_source_interval():
     return {
         "ts_start": dt.datetime(year=2013, month=1, day=1, hour=1),
         "ts_end": dt.datetime(year=2013, month=12, day=30, hour=1),
@@ -37,7 +39,7 @@ def search(request):
 
     return _render_sources(
         request,
-        source_form=SourceForm(initial=_default_source_initial()),
+        source_form=SourceForm(initial=_default_source_interval()),
         plot_form=PlotForm(),
         export_form=ExportForm(),
         fresh=True,
@@ -74,14 +76,15 @@ def export(request):
         f"ts_start={ts_start}, ts_end={ts_end}, aggregate: {aggregate}, validate: {validate}"
     )
 
-    #CHECKPOINT: export format switch
-
-    if export_format != "plain_text": return HttpResponse("Only plain_text is implemented for now", status=501)
-
     #quiery containing a single var from a distinct group filtered by dataset tag and depend_0
     example_var_per_file = list(sources.order_by('dataset__tag').distinct('dataset__tag', 'depend_0'))
 
     print(f"[EXPORT] Distinct file groups: {len(example_var_per_file)}")
+
+    #CHECKPOINT: export format switch
+
+    if export_format != "plain_text": return HttpResponse("Only plain_text is implemented for now", status=501)
+
 
     #CHECKPOINT: multifile handling
 
@@ -91,6 +94,7 @@ def export(request):
         dataset = item.dataset
         filename = f"{item.dataset.tag}_{item.depend_0}.txt"
         var_group = sources.filter(dataset=item.dataset, depend_0=item.depend_0).order_by('name')
+    
 
         print(f"[EXPORT] Single file streaming. Dataset: {item.dataset.tag}, depend_0: {item.depend_0}")
 
@@ -103,9 +107,12 @@ def export(request):
 
     else: #safe, it's not zero, data is cleaned and form is verified
 
+        #CHECKPOINT multifile zipping by var_group
+    
         print(f"[EXPORT] Multiple variable groups detected. Exporting each group as a separate file, expected filecount: {len(example_var_per_file)}")
         zip_timestamp = dt.datetime.now().strftime("%Y-%d-%m-%H-%M")
-        zip_filename = f"exported_data_{zip_timestamp}.zip"
+        zip_intervalstamp = ''
+        zip_filename = f"exported_data_{zip_timestamp + zip_intervalstamp}.zip"
         with tempfile.TemporaryDirectory() as temp_dir:
             export_dir = os.path.join(temp_dir, "exported_data")
             os.makedirs(export_dir, exist_ok=True)
@@ -139,7 +146,7 @@ def export(request):
             response["Content-Length"] = len(zip_bytes)
 
     return response
-    #CHECKPOINT: wiring for links, streaming and whatnot export logic optimizer for the query size
+    
 
     #return HttpResponse('Export stub!', status=200)
 

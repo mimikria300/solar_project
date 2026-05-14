@@ -4,10 +4,11 @@ from solarterra.utils import ts_bigint_resolver as ti
 from solarterra.utils import bigint_ts_resolver as it
 import math
 import datetime as dt
+import numpy as np
 
 #CHECKPOINT: dbquery
 
-class DBQuery():
+class DataHandler():
 
 
     def __init__(self, dataset, filter_field, t_start, t_stop, fields):
@@ -104,17 +105,17 @@ class DBQuery():
         elif self.record_arrays is not None:
             return self.record_arrays[:, 0]
 
-    def set_bin_map(self, bin_starts_array):
-        self.bin_map = np.searchsorted(bin_starts_array, self.get_full_time_array(), side="right")
+    def set_bin_map(self, bin_edges_array):
+        # Return 0-based bin indices for half-open bins [edge_i, edge_{i+1}).
+        self.bin_map = np.searchsorted(bin_edges_array, self.get_full_time_array(), side="right") - 1
 
-
-#CHECKPOINT: custom binning
-#make a stub
 
 class Bin():
 
     # points per plot: since plot aggregation is dynamic, either need to have fixed bin sizes or points per plot
+    #TODO: rename, make default option which calculates dynamically 
     PPP = 1000
+    #TODO: add wiring for setting PPP manually
 
     def __init__(self, t_start, t_stop):
 
@@ -131,9 +132,8 @@ class Bin():
         #print(f"in t_prev : {t_current}, {t_current - self.bin_td}")
         return t_current - self.bin_td
 
-#CHECKPOINT: plaintext instance
 
-class PlainTextFile():
+class PlainTextMeta():
 
 
     GLOBAL_ATTRIBUTE_MAP = [
@@ -157,6 +157,7 @@ class PlainTextFile():
 
         self.labels = None
         self.units = None
+        #TODO: move type_and_format to dynfield model; let it have a formatting function in it
         self.type_and_format_pairs = None
         self.format_map = None
 
@@ -173,6 +174,12 @@ class PlainTextFile():
         # prepend epoch/depend field so labels, units, formats, colwidths align with record_arrays column order
         # epoch isn't added to fields which are passed to query because it will be added as the filter_field in the query
         self.dyn_fields = [self.depend_field] + self.dyn_fields
+
+    def set_everything(self):
+        self.set_labels_and_units()
+        self.set_type_and_format_pairs()
+        self.set_format_map()
+        self.set_colwidths()
 
     def set_labels_and_units(self):
 
@@ -315,7 +322,7 @@ class PlainTextFile():
         yield "".join(lblrow) + "\n"
         yield "".join(unitrow) + "\n"
 
-    def generate_rows(self, rows):
+    def generate_formatted_rows(self, rows):
         '''Yield formatted data rows.'''
         for row in rows:
             yield self._format_row(row)
@@ -333,4 +340,10 @@ class PlainTextFile():
     def generate_footer(self):
         from solarterra.utils import NOW
         yield f"# End of data in the chosen interval for the dataset: {self.dataset.tag}\nFile generated at {NOW()}"
+
+
+# Backward-compatibility aliases while refactor settles.
+DataHaldler = DataHandler
+DBQuery = DataHandler
+PlainTextFile = PlainTextMeta
 

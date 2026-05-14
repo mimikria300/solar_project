@@ -1,13 +1,10 @@
 #lib import
-from pages.export_instances import DBQuery, Bin, PlainTextFile
+from pages.export_instances import Bin, DataHandler, PlainTextMeta
 
 from load_cdf.models import DataType
 from solarterra.utils import bigint_ts_resolver as it
 from solarterra.utils import ts_bigint_resolver as ti
 import numpy as np
-import datetime
-
-from pages.export_instances import Bin, DBQuery, PlainTextFile
 
 
 def plain_text_generator(variables, ts_start, ts_end, aggregate=False, validate=False):
@@ -24,88 +21,73 @@ def plain_text_generator(variables, ts_start, ts_end, aggregate=False, validate=
         f"variables num={len(variables)}, ts_start={ts_start}, ts_end={ts_end}"
     )
 
-    #CHECKPOINT: ptf poinking
+    #CHECKPOINT: ptm poinking
 
-    ptf = PlainTextFile(variables, dataset)
-    ptf.set_labels_and_units()
-    ptf.set_type_and_format_pairs()
-    ptf.set_format_map()
-    ptf.set_colwidths()
-    ptf = PlainTextFile(variables, dataset)
-    ptf.set_labels_and_units()
-    ptf.set_type_and_format_pairs()
-    ptf.set_format_map()
-    ptf.set_colwidths()
+    ptm = PlainTextMeta(variables, dataset)
+    ptm.set_everything()
 
     # header
-    yield from ptf.generate_header()
+    yield from ptm.generate_header()
 
     # build and run the query
-    # header
-    yield from ptf.generate_header()
-
-    # build and run the query
-    query = DBQuery(
+    data = DataHandler(
         dataset=dataset,
-        filter_field=ptf.depend_field.field_name,
+        filter_field=ptm.depend_field.field_name,
         t_start=ts_start,
         t_stop=ts_end,
-        fields=ptf.field_names_for_query
+        fields=ptm.field_names_for_query
     )
-    query.query()
+    data.query()
 
-    if not query.queryset.exists():
+    if not data.queryset.exists():
         print(f"[EXPORT] Query returned no rows for dataset={dataset.tag}")
         yield f"# No data for the specified time range {ts_start} to {ts_end}\n"
-        yield from ptf.generate_footer()
-        yield from ptf.generate_footer()
+        yield from ptm.generate_footer()
         return
 
     if not aggregate:
-        query.set_record_arrays()
-        rows = query.record_arrays
-        print(f"[EXPORT] Query returned rows: {query.get_record_count()}")
+        data.set_record_arrays()
+        rows = data.record_arrays
+        print(f"[EXPORT] Query returned rows: {data.get_record_count()}")
 
         if validate and rows is not None:
             # filter out values outside validmin/validmax — blanks them in the output
-            _apply_validation_to_records(rows, ptf.dyn_fields[1:])
-            _apply_validation_to_records(rows, ptf.dyn_fields[1:])
+            _apply_validation_to_records(rows, ptm.dyn_fields[1:])
 
     else:
 
-        query.set_var_arrays()
+        data.set_var_arrays()
         bin_instance = Bin(ts_start, ts_end)
         i_start = ti(ts_start)
         i_stop = ti(ts_end)
 
-        #extended for the last bin to be calculated properly
-        bin_starts_array = np.arange(
+        # Bin edges for [start, stop] with one extra edge for right-open intervals.
+        bin_edges_array = np.arange(
             i_start,
             i_stop + (bin_instance.bin_seconds * 2),
             step=bin_instance.bin_seconds,
         )
-        bin_centers_array = bin_starts_array + (bin_instance.half_bin)
-        query.set_bin_map(bin_starts_array)
+        bin_centers_array = bin_edges_array[:-1] + (bin_instance.half_bin)
+        data.set_bin_map(bin_edges_array)
 
         agg_cols = [bin_centers_array]
-        for i, var_array in enumerate(query.var_arrays[1:]):
+        for i, var_array in enumerate(data.var_arrays[1:]):
             # NaN out-of-range values before aggregation so they don't affect bin means
             if validate:
-                var_array = _validate_array(var_array, ptf.dyn_fields[i + 1])
-                var_array = _validate_array(var_array, ptf.dyn_fields[i + 1])
-            agg_cols.append(_aggregate_var_array(var_array, query.bin_map, bin_centers_array.shape[0]))
+                var_array = _validate_array(var_array, ptm.dyn_fields[i + 1])
+            agg_cols.append(_aggregate_var_array(var_array, data.bin_map, bin_centers_array.shape[0]))
 
         rows = np.stack(agg_cols, axis=1)
 
         print(
-            f"[EXPORT] Aggregation prep ready. rows={query.get_var_array_len()}, "
-            f"bin_seconds={bin_instance.bin_seconds}, bins={bin_starts_array.shape[0]}, "
+            f"[EXPORT] Aggregation prep ready. rows={data.get_var_array_len()}, "
+            f"bin_seconds={bin_instance.bin_seconds}, bins={bin_centers_array.shape[0]}, "
             f"aggregated_rows={rows.shape[0]}"
         )
 
-    yield from ptf.generate_label_rows()
-    yield from ptf.generate_rows(rows)
-    yield from ptf.generate_footer()
+    yield from ptm.generate_label_rows()
+    yield from ptm.generate_formatted_rows(rows)
+    yield from ptm.generate_footer()
 
 # -> dbq
 def _get_bounds(variable, dyn_field):
@@ -118,23 +100,20 @@ def _get_bounds(variable, dyn_field):
         vmax = vmax[dyn_field.multipart_index - 1]
     return vmin, vmax
 
-# -> dbq
 def _validate_array(arr, dyn_field):
-    '''Return a copy of arr with out-of-bounds values set to NaN.
-    Used in the aggregated export path: _aggregate_var_array already skips NaNs,
-    so this effectively excludes invalid points from bin means.'''
+    '''Return a float copy of arr with out-of-bounds values set to NaN.'''
     var = dyn_field.variable_instance
     vmin_raw, vmax_raw = _get_bounds(var, dyn_field)
-    if vmin_raw is None and vmax_raw is None:
-        return arr
-
     result = np.array(arr, dtype=float)
+
+    if vmin_raw is None and vmax_raw is None:
+        return result
+
     non_nan = ~np.isnan(result)
     if not non_nan.any():
         return result
-    # need a real sample value to cast the string bound to the right numpy type
-    sample = result[non_nan][0]
 
+    sample = result[non_nan][0]
     if vmin_raw is not None:
         bound = DataType.proper_type(vmin_raw, sample)
         if bound is not None:
@@ -143,6 +122,7 @@ def _validate_array(arr, dyn_field):
         bound = DataType.proper_type(vmax_raw, sample)
         if bound is not None:
             result[result > bound] = np.nan
+
     return result
 
 # -> dbq
@@ -183,7 +163,7 @@ def _aggregate_var_array(var_array, bin_map, bin_count):
     var_array = np.asarray(var_array)
     mask = ~np.isnan(var_array)
 
-    val_bin_map = bin_map[mask] - 1
+    val_bin_map = bin_map[mask]
     val_array = var_array[mask].astype(float)
 
     valid_mask = (val_bin_map >= 0) & (val_bin_map < bin_count)
