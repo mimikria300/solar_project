@@ -115,23 +115,3 @@ def _aggregate_var_array(var_array, bin_map, bin_count):
     means = sums / counts
     result[idx] = means
     return result
-
-
-#might be generated for each dynamic field instance and stored there for formatting consistency!
-def make_format_function(type_instance, format_str):
-    '''Factory for field-specific formatter functions.'''
-
-    if type_instance.is_epoch():
-        #nb: the current uploader is ommiting milliseconds completely (it rounds the timestamps to seconds)
-        return lambda x: it(x).strftime("%Y-%m-%d %H:%M:%S") + f"-{it(x).microsecond // 1000:03d}" if x is not None else "NaN"
-    elif format_str is not None and "i" in format_str.lower():
-        #it is usually for year/day/etc, doesn't really need to be zero-padded; added as a place to add different behavior for int types if needed
-        return lambda x: str(x) if x is not None else "NaN"
-    elif format_str is not None and "f" in format_str.lower():
-        return lambda x: f"{x:{format_str.lower().strip('f')}f}" if x is not None else "NaN"
-    elif format_str is not None and "e" in format_str.lower():
-        #scientific float formatter
-        return lambda x: f"{x:{format_str.lower().strip('e')}e}" if x is not None else "NaN"
-    else:
-        #fallback
-        return lambda x: str(x) if x is not None else "NaN"

@@ -262,16 +262,8 @@ class PlainTextMeta():
 
         self.type_and_format_pairs = []
         for df in self.dyn_fields:
-            var_instance = df.variable_instance
-            if df.multipart:
-                #it happens so that some variables have a single format for all components, not a list with repeated one
-                if isinstance(var_instance.output_format, str):
-                    format_str = var_instance.output_format
-                else:
-                    format_str = var_instance.output_format[df.multipart_index - 1]
-            else:
-                format_str = var_instance.output_format
-            type_instance = var_instance.get_data_type_instance()
+            format_str = df.get_format_str()
+            type_instance = df.data_type_instance
             self.type_and_format_pairs.append((type_instance, format_str))
 
     def set_format_map(self):
@@ -281,13 +273,16 @@ class PlainTextMeta():
         Sorted by the order of fields in the record arrays, which is the same as the order of field names in field_names_for_query.
         '''
 
-        #lazy to avoid circular import; later will be moved to dynamicfield class and called from there
-        from pages.export import make_format_function
         self.format_map = []
         for type_instance, format_str in self.type_and_format_pairs:
 
-            formatter = make_format_function(type_instance, format_str)
+            formatter = DynamicField.make_format_function(type_instance, format_str)
             self.format_map.append(formatter)
+
+        #alternatively, if we are sure format functions are set
+        # for df in self.dyn_fields:
+        #     formatter = df.format_function
+        #     self.format_map.append(formatter)
 
     def set_colwidths(self):
         self.colwidths = []
@@ -397,7 +392,7 @@ class PlainTextMeta():
             yield self._format_row(row)
 
     
-    #maybe could be used to log smth
+    #TODO: maybe could be used to log smth
     def stream_footer(self):
         from solarterra.utils import NOW
         yield f"# End of data in the chosen interval for the dataset: {self.dataset.tag}\nFile generated at {NOW()}"

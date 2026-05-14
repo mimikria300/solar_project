@@ -9,7 +9,7 @@ import os
 import numpy as np
 from django.core import management
 from django.db.models import Min, Max
-from solarterra.utils import bigint_ts_resolver
+from solarterra.utils import bigint_ts_resolver as it
 
 
 #------ float32 tryout------------#
@@ -545,10 +545,9 @@ class DynamicField(models.Model):
 
     # actual variable instance it represents
     variable_instance = models.ForeignKey("Variable", on_delete=models.CASCADE, related_name="dynamic")
-    
+
     # field of which model is it
     dynamic_model = models.ForeignKey("DynamicModel", on_delete=models.CASCADE, related_name="fields")
-
     data_type_instance = models.ForeignKey('DataType', related_name="fields", on_delete=models.SET_NULL, blank=True, null=True)
 
     objects = GetManager()
@@ -562,14 +561,17 @@ class DynamicField(models.Model):
     def __str__(self):
         return self.field_name
 
-    def set_format_function(self):
+    def get_format_str(self):
         format_str = None
         if self.variable_instance.output_format is not None:
             if isinstance(self.variable_instance.output_format, list):
                 format_str = self.variable_instance.output_format[self.multipart_index - 1]
             else:
                 format_str = self.variable_instance.output_format
+        return format_str
 
+    def set_format_function(self):
+        format_str = self.get_format_str()
         self.format_function = self.make_format_function(self.data_type_instance, format_str)
 
     @staticmethod
