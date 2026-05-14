@@ -30,6 +30,8 @@ class Command(UploadRequired, BaseCommand):
                 exit(1)
     
             field.update(data_type_instance = data_type_instance)
+            #setting format function for the field, which will be used to format values of the field in exports and plots
+            field.set_format_function()
 
             if data_type_instance.django_field is None:
                 make_log_entry(f"Field '{field.field_name}': '{variable.datatype}' default django field is unset. Will not be able to create model", "ERROR", upload=upload)

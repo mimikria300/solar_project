@@ -536,6 +536,7 @@ class DynamicField(models.Model):
     # is it made from multiple vars?
     multipart = models.BooleanField(default=False)
 
+    #1-based multipart index
     multipart_index = models.PositiveSmallIntegerField(blank=True, null=True)
 
     # field stores values in ArrayField?
@@ -558,9 +559,37 @@ class DynamicField(models.Model):
             setattr(self, key, value)
         self.save()
 
-
     def __str__(self):
         return self.field_name
+
+    def set_format_function(self):
+        format_str = None
+        if self.variable_instance.output_format is not None:
+            if isinstance(self.variable_instance.output_format, list):
+                format_str = self.variable_instance.output_format[self.multipart_index - 1]
+            else:
+                format_str = self.variable_instance.output_format
+
+        self.format_function = self.make_format_function(self.data_type_instance, format_str)
+
+    @staticmethod
+    def make_format_function(type_instance, format_str):
+        '''Factory for field-specific formatter functions.'''
+
+        if type_instance.is_epoch():
+            #nb: the current uploader is ommiting milliseconds completely (it rounds the timestamps to seconds)
+            return lambda x: it(x).strftime("%Y-%m-%d %H:%M:%S") + f"-{it(x).microsecond // 1000:03d}" if x is not None else "NaN"
+        elif format_str is not None and "i" in format_str.lower():
+            #it is usually for year/day/etc, doesn't really need to be zero-padded; added as a place to add different behavior for int types if needed
+            return lambda x: str(x) if x is not None else "NaN"
+        elif format_str is not None and "f" in format_str.lower():
+            return lambda x: f"{x:{format_str.lower().strip('f')}f}" if x is not None else "NaN"
+        elif format_str is not None and "e" in format_str.lower():
+            #scientific float formatter
+            return lambda x: f"{x:{format_str.lower().strip('e')}e}" if x is not None else "NaN"
+        else:
+            #fallback
+            return lambda x: str(x) if x is not None else "NaN"
 
     # def get_time_field(self):
     #     time_var = self.variable_instance.dataset.variables.filter(
