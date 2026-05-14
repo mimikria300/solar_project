@@ -10,7 +10,6 @@ import numpy as np
 
 class DataHandler():
 
-
     def __init__(self, dataset, filter_field, t_start, t_stop, fields):
         # instance
         self.dataset = dataset
@@ -30,36 +29,41 @@ class DataHandler():
         # not evaluated queryset
         self.queryset = None
         # transposed and sorted arrays of values
-        self.var_arrays = None
+        self.data_by_var = None
         # sorted arrays of records (timestamp + values)
-        self.record_arrays = None
+        self.data_by_record = None
 
         # bin mapping over over the array of epochs
         self.bin_map = None
 
     def query(self):
+
+        #building lazy query
         kwargs = {
             "{0}__gte".format(self.filter_field): self.start_limit,
             "{0}__lte".format(self.filter_field): self.stop_limit,
         }
         self.queryset = self.data_class.objects.filter(**kwargs)
 
-    def set_var_arrays(self):
+    def get_data(self):
 
         '''
-        Executes queryset, outputs in format:
-        arrays[0] = timestamps, arrays[1:] = field values in same order as fields
+        Executes queryset, sets numpy views for array in following format:
 
+        1. data_by_var:
+        arrays[0] = timestamps, arrays[1:] = field values in same order as fields
         epoch array
         field value array 1
         field value array 2
-        ...
 
-        Used in plotting.
+        2. data_by_record:
+        rows[0] = [timestamp, value1, value2, ...]
+        rows[1] = [timestamp, value1, value2, ...]
         '''
 
         # if queryset is not completely empty
         if self.queryset.exists():
+
             rows = self.queryset.values_list(*self.all_fields)
             pile = np.stack(rows)
             print("PILE SHAPE", pile.shape)
@@ -67,44 +71,97 @@ class DataHandler():
             sorted_pile = pile[pile[:, 0].argsort()]
 
             # transpose to form arrays
-            self.var_arrays = sorted_pile.T
-
-    def set_record_arrays(self):
-
-        '''
-        Executes queryset, outputs in format:
-        rows[0] = [timestamp, value1, value2, ...]
-        rows[1] = [timestamp, value1, value2, ...]
-        ...
-
-
-        Used in export.
-        '''
-        # if queryset is not completely empty
-        if self.queryset.exists():
-
-            rows = self.queryset.values_list(*self.all_fields)
-            pile = np.stack(rows)
-            print("PILE SHAPE", pile.shape)
-            # sort everythong by the first row
-            sorted_pile = pile[pile[:, 0].argsort()]
-
-            self.record_arrays = sorted_pile
+            self.data_by_var = sorted_pile.T
+            self.data_by_record = sorted_pile
 
     def get_var_array_len(self):
-        if self.var_arrays is not None:
-            return self.var_arrays[0].shape[0]
+        if self.data_by_var is not None:
+            return self.data_by_var[0].shape[0]
 
     def get_record_count(self):
-        if self.record_arrays is not None:
-            return self.record_arrays.shape[0]
+        if self.data_by_record is not None:
+            return self.data_by_record.shape[0]
 
     def get_full_time_array(self):
-        if self.var_arrays is not None:
-            return self.var_arrays[0]
-        elif self.record_arrays is not None:
-            return self.record_arrays[:, 0]
+        if self.data_by_var is not None:
+            return self.data_by_var[0]
+        elif self.data_by_record is not None:
+            return self.data_by_record[:, 0]
 
+    #---VALIDATION---
+    def _get_bounds_for_field(self, dyn_field):
+        '''Resolve validmin/validmax for a dynamic field, accounting for multipart variables.'''
+        variable = dyn_field.variable_instance
+
+        vmin = variable.validmin
+        if vmin is not None and dyn_field.multipart and isinstance(vmin, list):
+            vmin = vmin[dyn_field.multipart_index - 1]
+
+        vmax = variable.validmax
+        if vmax is not None and dyn_field.multipart and isinstance(vmax, list):
+            vmax = vmax[dyn_field.multipart_index - 1]
+
+        return vmin, vmax
+
+    def validate_array(self, arr, dyn_field):
+        '''Return a float copy of arr with out-of-bounds values set to NaN.'''
+        var = dyn_field.variable_instance
+        vmin_raw, vmax_raw = self._get_bounds_for_field(dyn_field)
+        result = np.array(arr, dtype=float)
+
+        if vmin_raw is None and vmax_raw is None:
+            return result
+
+        non_nan = ~np.isnan(result)
+        if not non_nan.any():
+            return result
+
+        sample = result[non_nan][0]
+        if vmin_raw is not None:
+            bound = DataType.proper_type(vmin_raw, sample)
+            if bound is not None:
+                result[result < bound] = np.nan
+        if vmax_raw is not None:
+            bound = DataType.proper_type(vmax_raw, sample)
+            if bound is not None:
+                result[result > bound] = np.nan
+
+        return result
+
+    def apply_validation_to_records(self, rows, data_dyn_fields):
+        '''Validate the non-aggregated record_arrays in-place.
+        Sets out-of-bounds cells to None so the row formatter renders them as blank.
+        Iterates over data columns (skipping col 0 = epoch).'''
+        for col_idx, df in enumerate(data_dyn_fields, start=1):
+            var = df.variable_instance
+            vmin_raw, vmax_raw = self._get_bounds_for_field(df)
+            if vmin_raw is None and vmax_raw is None:
+                continue
+
+            col = rows[:, col_idx]
+            # cast column to float for numeric comparison
+            #HUH r we sure, i don't understand the mechanic here
+            float_col = np.array(col, dtype=float)
+            non_nan = ~np.isnan(float_col)
+            if not non_nan.any():
+                continue
+            # need a sample to cast the string bound via DataType.proper_type
+            sample = float_col[non_nan][0]
+
+            invalid = np.zeros(len(col), dtype=bool)
+            if vmin_raw is not None:
+                bound = DataType.proper_type(vmin_raw, sample)
+                if bound is not None:
+                    invalid |= float_col < bound
+            if vmax_raw is not None:
+                bound = DataType.proper_type(vmax_raw, sample)
+                if bound is not None:
+                    invalid |= float_col > bound
+
+            if invalid.any():
+                rows[:, col_idx] = np.where(invalid, None, col)
+
+    #---AGGREGATION HELPERS---
     def set_bin_map(self, bin_edges_array):
         # Return 0-based bin indices for half-open bins [edge_i, edge_{i+1}).
         self.bin_map = np.searchsorted(bin_edges_array, self.get_full_time_array(), side="right") - 1
@@ -251,7 +308,9 @@ class PlainTextMeta():
                 cw = max(cw, 10)
             self.colwidths.append(cw+5) #+5 for padding
 
-    def generate_header(self):
+    #----STREAMING FUNCTIONS----
+
+    def stream_header(self):
         '''Yield the file header block: global attributes + record varying variable descriptions.'''
 
         depend_var = self.var_group[0].get_depend_var()
@@ -311,7 +370,7 @@ class PlainTextMeta():
         lines.append('#\n')
         return ''.join(lines)
 
-    def generate_label_rows(self):
+    def stream_label_rows(self):
         '''Yield the column label row and unit row.'''
         lblrow = ['#']
         unitrow = ['#']
@@ -322,22 +381,24 @@ class PlainTextMeta():
         yield "".join(lblrow) + "\n"
         yield "".join(unitrow) + "\n"
 
-    def generate_formatted_rows(self, rows):
+    def stream_formatted_rows(self, rows):
+
+        def _format_row(self, row):
+            '''Format map application to a row, then conversion to fixed-width string.'''
+            formatted_row = [" "]  # to correct first column padding to the # symbol in labels
+            for value, formatter, cw in zip(row, self.format_map, self.colwidths):
+                formatted_value = formatter(value)
+                formatted_value = ' '*(cw - len(formatted_value)) + formatted_value
+                formatted_row.append(formatted_value)
+            return "".join(formatted_row) + "\n"
+
         '''Yield formatted data rows.'''
         for row in rows:
             yield self._format_row(row)
 
-    def _format_row(self, row):
-        '''Format map application to a row, then conversion to fixed-width string.'''
-        formatted_row = [" "]  # to correct first column padding to the # symbol in labels
-        for value, formatter, cw in zip(row, self.format_map, self.colwidths):
-            formatted_value = formatter(value)
-            formatted_value = ' '*(cw - len(formatted_value)) + formatted_value
-            formatted_row.append(formatted_value)
-        return "".join(formatted_row) + "\n"
-
+    
     #maybe could be used to log smth
-    def generate_footer(self):
+    def stream_footer(self):
         from solarterra.utils import NOW
         yield f"# End of data in the chosen interval for the dataset: {self.dataset.tag}\nFile generated at {NOW()}"
 

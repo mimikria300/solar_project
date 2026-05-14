@@ -27,7 +27,7 @@ def plain_text_generator(variables, ts_start, ts_end, aggregate=False, validate=
     ptm.set_everything()
 
     # header
-    yield from ptm.generate_header()
+    yield from ptm.stream_header()
 
     # build and run the query
     data = DataHandler(
@@ -42,21 +42,21 @@ def plain_text_generator(variables, ts_start, ts_end, aggregate=False, validate=
     if not data.queryset.exists():
         print(f"[EXPORT] Query returned no rows for dataset={dataset.tag}")
         yield f"# No data for the specified time range {ts_start} to {ts_end}\n"
-        yield from ptm.generate_footer()
+        yield from ptm.stream_footer()
         return
 
     if not aggregate:
-        data.set_record_arrays()
-        rows = data.record_arrays
+        data.get_data()
+        rows = data.data_by_record
         print(f"[EXPORT] Query returned rows: {data.get_record_count()}")
 
         if validate and rows is not None:
             # filter out values outside validmin/validmax — blanks them in the output
-            _apply_validation_to_records(rows, ptm.dyn_fields[1:])
+            data.apply_validation_to_records(rows, ptm.dyn_fields[1:])
 
     else:
 
-        data.set_var_arrays()
+        data.get_data()
         bin_instance = Bin(ts_start, ts_end)
         i_start = ti(ts_start)
         i_stop = ti(ts_end)
@@ -71,10 +71,10 @@ def plain_text_generator(variables, ts_start, ts_end, aggregate=False, validate=
         data.set_bin_map(bin_edges_array)
 
         agg_cols = [bin_centers_array]
-        for i, var_array in enumerate(data.var_arrays[1:]):
+        for i, var_array in enumerate(data.data_by_var[1:]):
             # NaN out-of-range values before aggregation so they don't affect bin means
             if validate:
-                var_array = _validate_array(var_array, ptm.dyn_fields[i + 1])
+                var_array = data.validate_array(var_array, ptm.dyn_fields[i + 1])
             agg_cols.append(_aggregate_var_array(var_array, data.bin_map, bin_centers_array.shape[0]))
 
         rows = np.stack(agg_cols, axis=1)
@@ -85,78 +85,10 @@ def plain_text_generator(variables, ts_start, ts_end, aggregate=False, validate=
             f"aggregated_rows={rows.shape[0]}"
         )
 
-    yield from ptm.generate_label_rows()
-    yield from ptm.generate_formatted_rows(rows)
-    yield from ptm.generate_footer()
+    yield from ptm.stream_label_rows()
+    yield from ptm.stream_formatted_rows(rows)
+    yield from ptm.stream_footer()
 
-# -> dbq
-def _get_bounds(variable, dyn_field):
-    '''Resolve validmin/validmax for a single dynamic field, accounting for multipart variables.'''
-    vmin = variable.validmin
-    if vmin is not None and dyn_field.multipart and isinstance(vmin, list):
-        vmin = vmin[dyn_field.multipart_index - 1]
-    vmax = variable.validmax
-    if vmax is not None and dyn_field.multipart and isinstance(vmax, list):
-        vmax = vmax[dyn_field.multipart_index - 1]
-    return vmin, vmax
-
-def _validate_array(arr, dyn_field):
-    '''Return a float copy of arr with out-of-bounds values set to NaN.'''
-    var = dyn_field.variable_instance
-    vmin_raw, vmax_raw = _get_bounds(var, dyn_field)
-    result = np.array(arr, dtype=float)
-
-    if vmin_raw is None and vmax_raw is None:
-        return result
-
-    non_nan = ~np.isnan(result)
-    if not non_nan.any():
-        return result
-
-    sample = result[non_nan][0]
-    if vmin_raw is not None:
-        bound = DataType.proper_type(vmin_raw, sample)
-        if bound is not None:
-            result[result < bound] = np.nan
-    if vmax_raw is not None:
-        bound = DataType.proper_type(vmax_raw, sample)
-        if bound is not None:
-            result[result > bound] = np.nan
-
-    return result
-
-# -> dbq
-def _apply_validation_to_records(rows, data_dyn_fields):
-    '''Validate the non-aggregated record_arrays in-place.
-    Sets out-of-bounds cells to None so the row formatter renders them as blank.
-    Iterates over data columns (skipping col 0 = epoch).'''
-    for col_idx, df in enumerate(data_dyn_fields, start=1):
-        var = df.variable_instance
-        vmin_raw, vmax_raw = _get_bounds(var, df)
-        if vmin_raw is None and vmax_raw is None:
-            continue
-
-        col = rows[:, col_idx]
-        # cast column to float for numeric comparison
-        float_col = np.array(col, dtype=float)
-        non_nan = ~np.isnan(float_col)
-        if not non_nan.any():
-            continue
-        # need a sample to cast the string bound via DataType.proper_type
-        sample = float_col[non_nan][0]
-
-        invalid = np.zeros(len(col), dtype=bool)
-        if vmin_raw is not None:
-            bound = DataType.proper_type(vmin_raw, sample)
-            if bound is not None:
-                invalid |= float_col < bound
-        if vmax_raw is not None:
-            bound = DataType.proper_type(vmax_raw, sample)
-            if bound is not None:
-                invalid |= float_col > bound
-
-        if invalid.any():
-            rows[:, col_idx] = np.where(invalid, None, col)
 
 # -> dbq
 def _aggregate_var_array(var_array, bin_map, bin_count):
