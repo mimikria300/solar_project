@@ -525,11 +525,6 @@ class DynamicField(models.Model):
     # string reference to existing MODEL FIELD
     field_name = models.CharField(max_length=100)
 
-    # is it made from multiple vars?
-    multipart = models.BooleanField(default=False)
-
-    multipart_index = models.PositiveSmallIntegerField(blank=True, null=True)
-
     # field stores values in ArrayField?
     is_array_field = models.BooleanField(default=False, blank=True)
     array_size = models.PositiveIntegerField(null=True, blank=True)

@@ -28,8 +28,6 @@ def save_single_file(cdf_file, fields, model_class, upload):
             # for NRV
             if arr.ndim == 1:
                 arr = arr.reshape(1, -1)
-        elif field.multipart:
-            arr = cdf_obj[var.name][:, field.multipart_index - 1]
         else:
             arr = cdf_obj[var.name][...]
         
@@ -184,7 +182,7 @@ class Command(UploadRequired, BaseCommand):
         else:
             make_log_entry(f"{cdf_files.count()} files are to be uploaded to the db.", upload=upload)
 
-        fields = dmi.fields.order_by('variable_instance__depend_0', 'multipart', 'multipart_index')
+        fields = dmi.fields.order_by('variable_instance__depend_0', 'id')
 
         file_count = cdf_files.count()
         percent = 0

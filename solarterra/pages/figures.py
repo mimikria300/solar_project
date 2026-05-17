@@ -47,8 +47,8 @@ def n_trace(plot):
     for index, field in enumerate(fields):
         x, y = plot.get_values(index)
         fig.add_trace(go.Scatter(
-            x=plot.x_field_array,
-            y=plot.y_arrays[index],
+            x=x,
+            y=y,
             connectgaps=False,
             mode="lines+markers",
         ),

@@ -39,10 +39,10 @@ class DBQuery():
 
     def query(self):
         kwargs = {
-            '{0}__gte'.format(self.filter_field): self.start_limit,
-            '{0}__lte'.format(self.filter_field): self.stop_limit,
+            f'{self.filter_field}__gte': self.start_limit,
+            f'{self.filter_field}__lte': self.stop_limit,
         }
-        self.queryset = self.data_class.objects.filter(**kwargs)
+        self.queryset = self.data_class.objects.filter(**kwargs).order_by(self.filter_field)
     
     # alternative way ?
     """
@@ -55,15 +55,18 @@ class DBQuery():
     """
 
     def set_arrays(self):
-        # if queryset is not completely empty
-        if self.queryset.exists():
-            rows = self.queryset.values_list(*self.all_fields)
-            pile = np.stack(rows)
-            print("PILE SHAPE", pile.shape)
-            # sort everythong by the first row
-            sorted_pile = pile[pile[:, 0].argsort()]
-            # transpose to form arrays
-            self.arrays = sorted_pile.T
+        if not self.queryset.exists():
+            return
+
+        rows = list(self.queryset.values_list(*self.all_fields))
+        columns = list(zip(*rows))
+
+        self.arrays = [
+            np.array(column, dtype=object)
+            if any(isinstance(value, (list, tuple)) for value in column if value is not None)
+            else np.array(column)
+            for column in columns
+        ]
 
     def get_array_len(self):
         if self.arrays is not None:
@@ -142,15 +145,47 @@ class Plot():
 
         # numpy datatype
         self.y_field_numpy_type = variable.get_numpy_data_type()
-        # names of y_fields
-        self.y_fields = list(variable.dynamic.order_by('multipart_index').values_list('field_name', flat=True))
-        # a list of field arrays, in the same order as y_fields
+
+        dynamic_field = variable.dynamic.first()
+        if dynamic_field is None:
+            raise ValueError(f"Dynamic field for variable '{variable.name}' not found")
+
+        self.y_db_field = dynamic_field.field_name
+
+        self.component_indexes = [0, 1, 2] if variable.dims == 1 and variable.dim_sizes == 3 else [None]
+
+        self.y_fields = [self.y_db_field] * len(self.component_indexes)
+
         self.y_arrays = []
         
         self.invalid_values = []
         
         self.figure = None
 
+
+    @staticmethod
+    def _extract_array_component(array_column, component_index):
+        result = []
+
+        for row in array_column:
+            if row is None or len(row) <= component_index:
+                result.append(np.nan)
+                continue
+
+            value = row[component_index]
+            result.append(np.nan if value is None else value)
+
+        return np.array(result, dtype=float)
+
+
+    def _get_full_value_array(self, query, component_index):
+        field_index = query.all_fields.index(self.y_db_field)
+        full_value_array = query.arrays[field_index]
+
+        if component_index is None:
+            return full_value_array.astype(self.y_field_numpy_type)
+
+        return self._extract_array_component(full_value_array, component_index)
 
 
     def prepare_bins(self, bin_instance):
@@ -207,15 +242,13 @@ class Plot():
         self.x_field_array = np.array(list(map(it, query.get_full_time_array())))
 
     def get_y_arrays(self, query):
-        for field in self.y_fields:
-            field_index = query.all_fields.index(field)
-            full_value_array = query.arrays[field_index]
-            
-            # only nan values for this variable
+        for component_index in self.component_indexes:
+            full_value_array = self._get_full_value_array(query, component_index)
+
             if np.isnan(full_value_array).all():
                 self.y_arrays.append([])
             else:
-                self.y_arrays.append(full_value_array.astype(self.y_field_numpy_type))
+                self.y_arrays.append(full_value_array)
 
         # applying validation index in case of no aggregation is a little harder:
         # the only way to skip values when plotting is skipping index in both x_array and y_array at the same index
@@ -227,21 +260,17 @@ class Plot():
 
     # definitely could reduce # of steps here
     def get_agg_y_arrays(self, query):
-        
-        for i, field in enumerate(self.y_fields):
-            field_index = query.all_fields.index(field)
-            full_value_array = query.arrays[field_index]
+        for i, component_index in enumerate(self.component_indexes):
+            full_value_array = self._get_full_value_array(query, component_index)
 
             # getting an index of nans in value array
             mask = ~np.isnan(full_value_array)
-           
+
             # getting an index of invalid values
             validation_index = self.validation_index(full_value_array, field_index=i)
-            # if index exists and there is at least one invalid value, combine it with the mask
             if validation_index is not None and validation_index.any():
                 mask = mask & ~validation_index
 
-            
             # getting maps for only non-nans
             val_bin_map = query.bin_map[mask]
             # getting only non-nans
@@ -249,22 +278,17 @@ class Plot():
 
             idx, pos, counts = np.unique(val_bin_map, return_index=True, return_counts=True)
 
-            # number of groups even left
-            # if no aggregation groups survived - that means there will be no points on the plot
+            # if no aggregation groups survived - no points on the plot
             if idx.shape[0] == 0:
-                print(f"no data in field {field}, out of {self.variable.name} {self.variable.dataset}")
+                print(f"no data in field {self.y_db_field}, out of {self.variable.name} {self.variable.dataset}")
                 self.y_arrays.append([])
                 continue
 
             # getting sums for groups
             sums = np.add.reduceat(val_array, pos, axis=0)
-            # getting values
             means = sums / counts
-            # reconstructing index
-            np_type = self.y_field_numpy_type if self.y_field_numpy_type is not None else means.dtype
-            # get an array of nans of size and type
-            result = np.full(self.x_field_array.shape, np.nan, np_type)
-            # fill in significant values
+
+            result = np.full(self.x_field_array.shape, np.nan, dtype=float)
             result[idx] = means
             self.y_arrays.append(result)
         
