@@ -6,8 +6,6 @@ import math
 import datetime as dt
 import numpy as np
 
-#CHECKPOINT: dbquery
-
 class DataHandler():
 
     def __init__(self, dataset, filter_field, t_start, t_stop, fields):
@@ -19,12 +17,14 @@ class DataHandler():
         # time strings
         self.start_limit = ti(t_start)
         self.stop_limit = ti(t_stop)
-
-        # field (instance) on which the filtering happens
+        
         self.filter_field = filter_field
-        self.fields = fields
+        self.data_fields = fields
+        # field name on which the filtering happens
+        self.filter_field_name = filter_field.field_name
+        self.field_names_for_query = [df.field_name for df in self.data_fields] #field names, depend not included
         # 0th position of the filter_field is important
-        self.all_fields = [filter_field] + fields
+        self.all_field_names = [self.filter_field_name] + self.field_names_for_query
 
         # not evaluated queryset
         self.queryset = None
@@ -33,7 +33,9 @@ class DataHandler():
         # sorted arrays of records (timestamp + values)
         self.data_by_record = None
 
-        # bin mapping over over the array of epochs
+        # boolean mask, True for valid values, False for None/NaN, same shape as data arrays, set in set_mask() and updated in add_validation_to_mask()
+        self.mask = None
+        # bin mapping over the array of epochs
         self.bin_map = None
 
     def query(self):
@@ -41,11 +43,11 @@ class DataHandler():
         #building lazy query
         kwargs = {
             "{0}__gte".format(self.filter_field): self.start_limit,
-            "{0}__lte".format(self.filter_field): self.stop_limit,
+            "{0}__lt".format(self.filter_field): self.stop_limit,
         }
         self.queryset = self.data_class.objects.filter(**kwargs)
 
-    def get_data(self):
+    def set_data(self):
 
         '''
         Executes queryset, sets numpy views for array in following format:
@@ -64,29 +66,25 @@ class DataHandler():
         # if queryset is not completely empty
         if self.queryset.exists():
 
-            rows = self.queryset.values_list(*self.all_fields)
+            rows = self.queryset.values_list(*self.all_field_names)
             pile = np.stack(rows)
             print("PILE SHAPE", pile.shape)
-            # sort everythong by the first row
+            # sort everything by the first row
             sorted_pile = pile[pile[:, 0].argsort()]
 
             # transpose to form arrays
             self.data_by_var = sorted_pile.T
             self.data_by_record = sorted_pile
 
-    def get_var_array_len(self):
-        if self.data_by_var is not None:
-            return self.data_by_var[0].shape[0]
+            #apply the raw mask for None/NaN values to the data arrays
+            self.set_mask()
 
-    def get_record_count(self):
-        if self.data_by_record is not None:
-            return self.data_by_record.shape[0]
-
-    def get_full_time_array(self):
+    def set_mask(self):
+        '''Set a boolean mask for values that is None/NaN'''
         if self.data_by_var is not None:
-            return self.data_by_var[0]
-        elif self.data_by_record is not None:
-            return self.data_by_record[:, 0]
+            self.mask = ~np.isnan(self.data_by_var)
+        else:
+            self.mask = None
 
     #---VALIDATION---
     def _get_bounds_for_field(self, dyn_field):
@@ -103,69 +101,147 @@ class DataHandler():
 
         return vmin, vmax
 
-    def validate_array(self, arr, dyn_field):
-        '''Return a float copy of arr with out-of-bounds values set to NaN.'''
-        var = dyn_field.variable_instance
-        vmin_raw, vmax_raw = self._get_bounds_for_field(dyn_field)
-        result = np.array(arr, dtype=float)
+    def add_validation_to_mask(self):
+        '''Update the boolean mask in-place to mark out-of-bounds values as False.'''
 
-        if vmin_raw is None and vmax_raw is None:
-            return result
-
-        non_nan = ~np.isnan(result)
-        if not non_nan.any():
-            return result
-
-        sample = result[non_nan][0]
-        if vmin_raw is not None:
-            bound = DataType.proper_type(vmin_raw, sample)
-            if bound is not None:
-                result[result < bound] = np.nan
-        if vmax_raw is not None:
-            bound = DataType.proper_type(vmax_raw, sample)
-            if bound is not None:
-                result[result > bound] = np.nan
-
-        return result
-
-    def apply_validation_to_records(self, rows, data_dyn_fields):
-        '''Validate the non-aggregated record_arrays in-place.
-        Sets out-of-bounds cells to None so the row formatter renders them as blank.
-        Iterates over data columns (skipping col 0 = epoch).'''
-        for col_idx, df in enumerate(data_dyn_fields, start=1):
-            var = df.variable_instance
-            vmin_raw, vmax_raw = self._get_bounds_for_field(df)
-            if vmin_raw is None and vmax_raw is None:
+        for idx, df in enumerate(self.data_fields, start=1):
+            vmin_str, vmax_str = self._get_bounds_for_field(df)
+            if vmin_str is None and vmax_str is None:
                 continue
-
-            col = rows[:, col_idx]
-            # cast column to float for numeric comparison
-            #HUH r we sure, i don't understand the mechanic here
-            float_col = np.array(col, dtype=float)
-            non_nan = ~np.isnan(float_col)
-            if not non_nan.any():
-                continue
-            # need a sample to cast the string bound via DataType.proper_type
-            sample = float_col[non_nan][0]
-
-            invalid = np.zeros(len(col), dtype=bool)
-            if vmin_raw is not None:
-                bound = DataType.proper_type(vmin_raw, sample)
+            
+            arr_mask = self.mask[idx, :] #a view, will be edited in-place
+            proper_arr = self.data_by_var[idx, :].copy().astype(df.data_type_instance.numpy_type)
+            #get first non-NaN value as sample for proper_type parsing of the bound
+            sample = proper_arr[arr_mask][0] if arr_mask.any() else None
+            if vmin_str is not None:
+                bound = DataType.proper_type(vmin_str, sample)
                 if bound is not None:
-                    invalid |= float_col < bound
-            if vmax_raw is not None:
-                bound = DataType.proper_type(vmax_raw, sample)
+                    arr_mask &= proper_arr >= bound
+            if vmax_str is not None:
+                bound = DataType.proper_type(vmax_str, sample)
                 if bound is not None:
-                    invalid |= float_col > bound
+                    arr_mask &= proper_arr <= bound
+            
+        def apply_validation(self):
+            pass
 
-            if invalid.any():
-                rows[:, col_idx] = np.where(invalid, None, col)
 
-    #---AGGREGATION HELPERS---
-    def set_bin_map(self, bin_edges_array):
+            # # cast column to float for numeric comparison
+            # #HUH r we sure, i don't understand the mechanic here
+            # float_col = np.array(col, dtype=float)
+            # non_nan = ~np.isnan(float_col)
+            # if not non_nan.any():
+            #     continue
+            # # need a sample to cast the string bound via DataType.proper_type
+            # sample = float_col[non_nan][0]
+
+            # invalid = np.zeros(len(col), dtype=bool)
+            # if vmin_str is not None:
+            #     bound = DataType.proper_type(vmin_str, sample)
+            #     if bound is not None:
+            #         invalid |= float_col < bound
+            # if vmax_str is not None:
+            #     bound = DataType.proper_type(vmax_str, sample)
+            #     if bound is not None:
+            #         invalid |= float_col > bound
+
+            # if invalid.any():
+            #     self.data_by_record[:, col_idx] = np.where(invalid, np.nan, col)
+
+    def clean_data(self):
+        '''Cast data into proper types, swap unvalid values to None, then converts to numpy object'''
+        for idx, df in enumerate(self.data_fields, start=1):
+            var_array = self.data_by_var[idx, :]
+            mask = self.mask[idx, :]
+            ok_values = var_array[mask].astype(df.data_type_instance.numpy_type)
+            clean_var_array = np.full(var_array.shape, None, dtype=object)
+            clean_var_array[mask] = ok_values
+            self.data_by_var[idx, :] = clean_var_array
+            
+
+    #---AGGREGATION---
+    def set_bin_arrays(self):
+
+        i_start = self.start_limit
+        i_stop = self.stop_limit
+        self.bin_instance = Bin(it(i_start), it(i_stop))
+
+        # Bin edges for [start, stop] with one extra edge for right-open intervals.
+        bin_edges_array = np.arange(
+            i_start,
+            i_stop + (self.bin_instance.bin_seconds),
+            step=self.bin_instance.bin_seconds,
+        )
+        #getting rid of bins that doesn't have any epoch in them, to avoid having a lot of empty bins in case of sparse data
+        epoch_array = self.get_full_time_array()
+        is_there_epoch_in_bin = np.zeros(bin_edges_array.shape[0], dtype=bool)
+        is_there_epoch_in_bin[np.unique(np.searchsorted(bin_edges_array, epoch_array, side="right") - 1)] = True
+        
+        bin_edges_array = bin_edges_array[is_there_epoch_in_bin]
+        bin_centers_array = bin_edges_array + (self.bin_instance.half_bin)
+
+        self.bin_edges_array = bin_edges_array
+        self.bin_centers_array = bin_centers_array
+
+    def set_bin_map(self):
         # Return 0-based bin indices for half-open bins [edge_i, edge_{i+1}).
-        self.bin_map = np.searchsorted(bin_edges_array, self.get_full_time_array(), side="right") - 1
+        # -1 because right-sided searchsorted returns the index of the place to insert the value to keep order, which is after the bin idx
+        self.bin_map = np.searchsorted(self.bin_edges_array, self.get_full_time_array(), side="right") - 1
 
+    def set_aggregated_data(self):
+        '''Set an aggregated version of the data_by_record and data_by_var based on the bin_map and bin centers.
+        The bin centers are calculated in the export function.
+        Aggregated data is cast into object numpy type. Also cleans data as clean_data does, but not in-place'''
+        
+        # initialize empty arrays for aggregated data
+        agg_data_by_var = [self.bin_centers_array]
+        for idx, df in enumerate(self.data_fields, start=1):
+
+            var_array = self.data_by_var[idx, :]
+            mask = self.mask[idx, :]
+
+            #filtering out unvalid values ant their bin indexies
+            ok_bins = self.bin_map[mask]
+            ok_values = var_array[mask].astype(df.data_type_instance.numpy_type)
+
+            #group bins
+            bin_id, pos, count = np.unique(ok_bins, return_index=True, return_counts=True)
+            #count means for each bin
+            means = np.add.reduceat(ok_values, pos, axis=0) / count
+            #restore missing bins, filling with None to pass to formatter, now in object type after all math handling
+            agg_var_array = np.full(self.bin_centers_array.shape[0], None, dtype=object)
+            agg_var_array[bin_id] = means
+            agg_data_by_var.append(agg_var_array)
+
+        self.agg_data_by_var = np.stack(agg_data_by_var, axis=0)
+        self.agg_data_by_record = self.agg_data_by_var.T
+
+
+    #---HELPERS---
+    def get_var_array_len(self):
+        if self.data_by_var is not None:
+            return self.data_by_var[0].shape[0]
+
+    def get_record_count(self):
+        if self.data_by_record is not None:
+            return self.data_by_record.shape[0]
+
+    def get_full_time_array(self):
+        if self.data_by_var is not None:
+            return self.data_by_var[0]
+        elif self.data_by_record is not None:
+            return self.data_by_record[:, 0]
+        else:
+            return None
+
+    def test(self):
+        print("DATA BY VAR", self.data_by_var)
+        print("DATA BY RECORD", self.data_by_record)
+        #numpy datatypes vs proper DataType numpy types for every field
+        ff = self.filter_field
+        print(f"FILTER FIELD: {ff.field_name}, ACTURAL TYPE: {self.data_by_var[0].dtype}, NUMPY PROPER TYPE: {ff.data_type_instance.numpy_type}")
+        for n,df in enumerate(self.data_fields, start=1):
+            print(f"FIELD: {df.field_name}, ACTURAL TYPE: {self.data_by_var[n].dtype}, NUMPY PROPER TYPE: {df.data_type_instance.numpy_type}")
 
 class Bin():
 
@@ -189,7 +265,6 @@ class Bin():
         #print(f"in t_prev : {t_current}, {t_current - self.bin_td}")
         return t_current - self.bin_td
 
-
 class PlainTextMeta():
 
 
@@ -206,15 +281,14 @@ class PlainTextMeta():
         ("PI_AFFILIATION", "pi_affiliation"),
     ]
 
-    def __init__(self, var_group, dataset):
+    def __init__(self, var_group):
 
         #var_group should belong to a single dataset and have the same depend_0
         self.var_group = var_group
-        self.dataset = dataset
+        self.dataset = var_group[0].dataset
 
         self.labels = None
         self.units = None
-        #TODO: move type_and_format to dynfield model; let it have a formatting function in it
         self.type_and_format_pairs = None
         self.format_map = None
 
@@ -223,9 +297,8 @@ class PlainTextMeta():
         # Get all field names ordered by variable name then component index to match header
         dyn_fields_q = DynamicField.objects.filter(variable_instance__in=var_group).order_by('variable_instance__name', 'multipart_index')
         self.dyn_fields = list(dyn_fields_q.all()) #field instances
-        self.field_names_for_query = [df.field_name for df in self.dyn_fields] #field names, depend not included
         print(
-            f"[EXPORT] in _table_builder. dataset={dataset.tag}, depend_field={self.depend_field.field_name}, "
+            f"[EXPORT] in _table_builder. dataset={self.dataset.tag}, depend_field={self.depend_field.field_name}, "
             f"dynamic_fields={self.dyn_fields}"
         )
         # prepend epoch/depend field so labels, units, formats, colwidths align with record_arrays column order
@@ -375,31 +448,25 @@ class PlainTextMeta():
 
         yield "".join(lblrow) + "\n"
         yield "".join(unitrow) + "\n"
+    
+    def _format_row(self, row):
+        '''Format map application to a row, then conversion to fixed-width string.'''
+        formatted_row = [" "]  # to correct first column padding to the # symbol in labels
+        for value, formatter, cw in zip(row, self.format_map, self.colwidths):
+            formatted_value = formatter(value)
+            formatted_value = ' '*(cw - len(formatted_value)) + formatted_value
+            formatted_row.append(formatted_value)
+        return "".join(formatted_row) + "\n"
 
     def stream_formatted_rows(self, rows):
-
-        def _format_row(self, row):
-            '''Format map application to a row, then conversion to fixed-width string.'''
-            formatted_row = [" "]  # to correct first column padding to the # symbol in labels
-            for value, formatter, cw in zip(row, self.format_map, self.colwidths):
-                formatted_value = formatter(value)
-                formatted_value = ' '*(cw - len(formatted_value)) + formatted_value
-                formatted_row.append(formatted_value)
-            return "".join(formatted_row) + "\n"
 
         '''Yield formatted data rows.'''
         for row in rows:
             yield self._format_row(row)
 
-    
     #TODO: maybe could be used to log smth
     def stream_footer(self):
         from solarterra.utils import NOW
         yield f"# End of data in the chosen interval for the dataset: {self.dataset.tag}\nFile generated at {NOW()}"
 
-
-# Backward-compatibility aliases while refactor settles.
-DataHaldler = DataHandler
-DBQuery = DataHandler
-PlainTextFile = PlainTextMeta
 

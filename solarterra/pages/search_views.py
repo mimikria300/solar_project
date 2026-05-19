@@ -11,7 +11,7 @@ import tempfile, os, shutil
 
 from pages.plotting import get_plots
 from pages.export import plain_text_generator
-from pages.export_instances import DBQuery, PlainTextMeta, Bin
+from pages.export_instances import DataHandler, PlainTextMeta, Bin
 
 #helper functions for search_view
 def _default_source_interval():

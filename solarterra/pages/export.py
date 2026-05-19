@@ -23,7 +23,7 @@ def plain_text_generator(variables, ts_start, ts_end, aggregate=False, validate=
 
     #CHECKPOINT: ptm poinking
 
-    ptm = PlainTextMeta(variables, dataset)
+    ptm = PlainTextMeta(variables)
     ptm.set_everything()
 
     # header
@@ -32,86 +32,36 @@ def plain_text_generator(variables, ts_start, ts_end, aggregate=False, validate=
     # build and run the query
     data = DataHandler(
         dataset=dataset,
-        filter_field=ptm.depend_field.field_name,
+        filter_field=ptm.depend_field,
         t_start=ts_start,
         t_stop=ts_end,
-        fields=ptm.field_names_for_query
+        fields=ptm.dyn_fields[1:]  # exclude depend field
     )
     data.query()
-
-    if not data.queryset.exists():
+    #data.set_data()
+    #data.test()  # debug print of data arrays and field info
+    if not data.queryset.exists(): 
         print(f"[EXPORT] Query returned no rows for dataset={dataset.tag}")
         yield f"# No data for the specified time range {ts_start} to {ts_end}\n"
         yield from ptm.stream_footer()
         return
+    
+    data.set_data() #excecute query, now is in np.float64 #FIXME: in case of non-float\non-int types might fail; r we even do that?
+    
+    if validate:
+        data.add_validation_to_mask()
 
-    if not aggregate:
-        data.get_data()
-        rows = data.data_by_record
-        print(f"[EXPORT] Query returned rows: {data.get_record_count()}")
-
-        if validate and rows is not None:
-            # filter out values outside validmin/validmax — blanks them in the output
-            data.apply_validation_to_records(rows, ptm.dyn_fields[1:])
+    if aggregate:
+        data.set_bin_arrays()  # creates bin_edges_array and bin_centers_array
+        data.set_bin_map()  # creates bin id for each value
+        
+        data.set_aggregated_data()
+        rows = data.agg_data_by_record
 
     else:
-
-        data.get_data()
-        bin_instance = Bin(ts_start, ts_end)
-        i_start = ti(ts_start)
-        i_stop = ti(ts_end)
-
-        # Bin edges for [start, stop] with one extra edge for right-open intervals.
-        bin_edges_array = np.arange(
-            i_start,
-            i_stop + (bin_instance.bin_seconds * 2),
-            step=bin_instance.bin_seconds,
-        )
-        bin_centers_array = bin_edges_array[:-1] + (bin_instance.half_bin)
-        data.set_bin_map(bin_edges_array)
-
-        agg_cols = [bin_centers_array]
-        for i, var_array in enumerate(data.data_by_var[1:]):
-            # NaN out-of-range values before aggregation so they don't affect bin means
-            if validate:
-                var_array = data.validate_array(var_array, ptm.dyn_fields[i + 1])
-            agg_cols.append(_aggregate_var_array(var_array, data.bin_map, bin_centers_array.shape[0]))
-
-        rows = np.stack(agg_cols, axis=1)
-
-        print(
-            f"[EXPORT] Aggregation prep ready. rows={data.get_var_array_len()}, "
-            f"bin_seconds={bin_instance.bin_seconds}, bins={bin_centers_array.shape[0]}, "
-            f"aggregated_rows={rows.shape[0]}"
-        )
+        data.clean_data()  # mask invalid values with np.nan/None depending on the type
+        rows = data.data_by_record
 
     yield from ptm.stream_label_rows()
     yield from ptm.stream_formatted_rows(rows)
     yield from ptm.stream_footer()
-
-
-# -> dbq
-def _aggregate_var_array(var_array, bin_map, bin_count):
-    var_array = np.asarray(var_array)
-    mask = ~np.isnan(var_array)
-
-    val_bin_map = bin_map[mask]
-    val_array = var_array[mask].astype(float)
-
-    valid_mask = (val_bin_map >= 0) & (val_bin_map < bin_count)
-    val_bin_map = val_bin_map[valid_mask]
-    val_array = val_array[valid_mask]
-
-    result = np.full(bin_count, np.nan)
-    if val_bin_map.shape[0] == 0:
-        return result
-
-    order = np.argsort(val_bin_map)
-    val_bin_map = val_bin_map[order]
-    val_array = val_array[order]
-
-    idx, pos, counts = np.unique(val_bin_map, return_index=True, return_counts=True)
-    sums = np.add.reduceat(val_array, pos)
-    means = sums / counts
-    result[idx] = means
-    return result
