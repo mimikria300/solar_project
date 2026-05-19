@@ -576,7 +576,7 @@ class DynamicField(models.Model):
 
     @staticmethod
     def make_format_function(type_instance, format_str):
-        '''Factory for field-specific formatter functions. X shall be passed in proper python type.'''
+        '''Factory for field-specific formatter functions. X should be passed in proper python type.'''
 
         if type_instance.is_epoch():
             #nb: the current uploader is ommiting milliseconds completely (it rounds the timestamps to seconds)
