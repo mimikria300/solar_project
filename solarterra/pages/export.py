@@ -59,7 +59,7 @@ def plain_text_generator(variables, ts_start, ts_end, aggregate=False, validate=
         rows = data.agg_data_by_record
 
     else:
-        data.clean_data()  # mask invalid values with np.nan/None depending on the type
+        data.clean_data()  # mask invalid values with None, cast to numpy object
         rows = data.data_by_record
 
     yield from ptm.stream_label_rows()

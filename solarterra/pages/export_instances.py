@@ -14,9 +14,9 @@ class DataHandler():
         # class
         self.data_class = dataset.dynamic.resolve_class()
 
-        # time strings
-        self.start_limit = ti(t_start)
-        self.stop_limit = ti(t_stop)
+        # time bounds in integer form
+        self.i_start = ti(t_start)
+        self.i_stop = ti(t_stop)
         
         self.filter_field = filter_field
         self.data_fields = fields
@@ -42,8 +42,8 @@ class DataHandler():
 
         #building lazy query
         kwargs = {
-            "{0}__gte".format(self.filter_field): self.start_limit,
-            "{0}__lt".format(self.filter_field): self.stop_limit,
+            "{0}__gte".format(self.filter_field): self.i_start,
+            "{0}__lt".format(self.filter_field): self.i_stop,
         }
         self.queryset = self.data_class.objects.filter(**kwargs)
 
@@ -121,32 +121,6 @@ class DataHandler():
                 bound = DataType.proper_type(vmax_str, sample)
                 if bound is not None:
                     arr_mask &= proper_arr <= bound
-            
-        def apply_validation(self):
-            pass
-
-
-            # # cast column to float for numeric comparison
-            # #HUH r we sure, i don't understand the mechanic here
-            # float_col = np.array(col, dtype=float)
-            # non_nan = ~np.isnan(float_col)
-            # if not non_nan.any():
-            #     continue
-            # # need a sample to cast the string bound via DataType.proper_type
-            # sample = float_col[non_nan][0]
-
-            # invalid = np.zeros(len(col), dtype=bool)
-            # if vmin_str is not None:
-            #     bound = DataType.proper_type(vmin_str, sample)
-            #     if bound is not None:
-            #         invalid |= float_col < bound
-            # if vmax_str is not None:
-            #     bound = DataType.proper_type(vmax_str, sample)
-            #     if bound is not None:
-            #         invalid |= float_col > bound
-
-            # if invalid.any():
-            #     self.data_by_record[:, col_idx] = np.where(invalid, np.nan, col)
 
     def clean_data(self):
         '''Cast data into proper types, swap unvalid values to None, then converts to numpy object'''
@@ -162,8 +136,8 @@ class DataHandler():
     #---AGGREGATION---
     def set_bin_arrays(self):
 
-        i_start = self.start_limit
-        i_stop = self.stop_limit
+        i_start = self.i_start
+        i_stop = self.i_stop
         self.bin_instance = Bin(it(i_start), it(i_stop))
 
         # Bin edges for [start, stop] with one extra edge for right-open intervals.
@@ -213,7 +187,13 @@ class DataHandler():
             agg_var_array[bin_id] = means
             agg_data_by_var.append(agg_var_array)
 
-        self.agg_data_by_var = np.stack(agg_data_by_var, axis=0)
+        agg_data_by_var = np.stack(agg_data_by_var, axis=0)
+
+        #crudely throwing away the last bin, not to confuse user of why it sticks out
+        if self.bin_centers_array[-1] > self.i_stop:
+            agg_data_by_var = agg_data_by_var[:, :-1]
+
+        self.agg_data_by_var = agg_data_by_var
         self.agg_data_by_record = self.agg_data_by_var.T
 
 
@@ -286,6 +266,8 @@ class PlainTextMeta():
         #var_group should belong to a single dataset and have the same depend_0
         self.var_group = var_group
         self.dataset = var_group[0].dataset
+        # self.ti_start = ti_start
+        # self.ti_stop = ti_stop
 
         self.labels = None
         self.units = None
@@ -467,6 +449,7 @@ class PlainTextMeta():
     #TODO: maybe could be used to log smth
     def stream_footer(self):
         from solarterra.utils import NOW
-        yield f"# End of data in the chosen interval for the dataset: {self.dataset.tag}\nFile generated at {NOW()}"
+        yield f"# End of data in the chosen interval for the dataset: {self.dataset.tag}. \nFile generated at {NOW()}"
+        #Time interval: {ti(self)}
 
 
