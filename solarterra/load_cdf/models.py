@@ -548,17 +548,33 @@ class DynamicField(models.Model):
         return self.field_name
 
     def get_format_str(self):
+        '''
+        Can be a single str for dims = 0, always a list for dims = 1. Dims > 1 is not supported yet.
+        '''
+        var = self.variable_instance
         format_str = None
-        if self.variable_instance.output_format is not None:
-            if isinstance(self.variable_instance.output_format, list):
-                format_str = self.variable_instance.output_format[self.multipart_index - 1]
-            else:
-                format_str = self.variable_instance.output_format
+        if var.output_format is not None:
+            if var.dims == 0:
+                format_str = var.output_format
+            elif var.dims == 1:
+                #it can be a single value or a list already, make it a list always
+                if isinstance(var.output_format, list):
+                    format_str = var.output_format
+                else:
+                    format_str = [var.output_format] * var.dim_sizes
         return format_str
 
     def set_format_function(self):
+        '''Correct usage for a single record of multipart field: formatted_list = [f(val) for f,val in zip(field.format_function, field_values)]
+        Or can be called like field.format_function[0](val_0)'''
+        
         format_str = self.get_format_str()
-        self.format_function = self.make_format_function(self.data_type_instance, format_str)
+        if isinstance(format_str, list): 
+            self.format_function = [self.make_format_function(self.data_type_instance, fs) for fs in format_str]
+        else:
+            self.format_function = self.make_format_function(self.data_type_instance, format_string)
+
+        return format_function
 
     @staticmethod
     def make_format_function(type_instance, format_str):
