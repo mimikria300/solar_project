@@ -6,14 +6,14 @@ import numpy as np
 PLOT_HEIGHT = 250
 PLOT_MARGIN = dict(l=80, r=80, t=0, b=20)
 AXIS_COLOR = "black"
-AXIS_LINE_WIDTH = 1
+AXIS_LINE_WIDTH = 2
 MAJOR_TICK_LEN = 8
-MAJOR_TICK_WIDTH = 1
+MAJOR_TICK_WIDTH = 2
 MINOR_TICK_LEN = 4
-MINOR_TICK_WIDTH = 1 
-GRID_WIDTH = 1
+MINOR_TICK_WIDTH = 2 
+GRID_WIDTH = 2
 GRID_COLOR = "rgba(0, 0, 0, 0.15)"
-TICK_FONT_SIZE = 14
+FONT_SIZE = 14
 
 
 def apply_common_layout(fig, height):
@@ -37,7 +37,11 @@ def apply_axis_style(fig):
         ticklen=MAJOR_TICK_LEN,      # длина тиков
         tickwidth=MAJOR_TICK_WIDTH,  # толщина тиков
         tickfont=dict(               # подписи тиков
-            size=TICK_FONT_SIZE,
+            size=FONT_SIZE,
+            color=AXIS_COLOR,
+        ),
+        title_font=dict(             # подпись осей
+            size=FONT_SIZE,
             color=AXIS_COLOR,
         ),
         showgrid=True,               # сетка
@@ -129,7 +133,7 @@ def n_trace(plot):
 
     fig.update_traces(marker=dict(size=4))
     
-    apply_common_layout(fig, PLOT_HEIGHT * len(fields))
+    apply_common_layout(fig, PLOT_HEIGHT * len(fields) - 70)
     apply_axis_style(fig)
 
     fig.update_xaxes(
@@ -191,6 +195,14 @@ def spectrogram(plot):
             title=dict(
                 text=colorbar_title,
                 side='right',
+                font=dict(
+                    size=FONT_SIZE,
+                    color=AXIS_COLOR,
+                ),
+            ),
+            tickfont=dict(
+                size=FONT_SIZE,
+                color=AXIS_COLOR,
             ),
             x=1.0,
             xanchor='left',
