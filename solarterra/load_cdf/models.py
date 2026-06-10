@@ -250,9 +250,9 @@ class Dataset(models.Model):
         max_time = result['max_time']
         
         if min_time is not None:
-            min_time = bigint_ts_resolver(min_time)
+            min_time = it(min_time)
         if max_time is not None:
-            max_time = bigint_ts_resolver(max_time)
+            max_time = it(max_time)
 
         epoch_variable = epoch_field.variable_instance
         _dt_fmt = "%d-%b-%Y %H:%M:%S.%f"
