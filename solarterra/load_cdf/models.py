@@ -360,6 +360,7 @@ class Variable(models.Model):
     # all JSON fields are expected to contain lists of strings (lists of lists for spectrogramms)
     output_format = models.JSONField(blank=True, null=True)
     lablaxis = models.JSONField(blank=True, null=True)
+    labl_ptr = models.CharField(max_length=200, blank=True, null=True)
     units = models.JSONField(blank=True, null=True)
     validmin = models.JSONField(blank=True, null=True)
     validmax = models.JSONField(blank=True, null=True)
@@ -394,18 +395,42 @@ class Variable(models.Model):
     def ordered_attributes(self):
         return self.attributes.order_by('title')
 
-    def get_axis_label(self, index=None):
-        if not hasattr(self, 'lablaxis') or self.lablaxis is None:
-            label = ""
-        else:
-            label = self.lablaxis[index] if index is not None else self.lablaxis
-        if self.units is not None:
-            if index is not None and not isinstance(self.units, str):
-                label += f", {self.units[index]}"    
-            else:
-                label += f", {self.units}"
+    def _pick_axis_value(self, value, index=None):
+        if value is None:
+            return ""
 
-        return label
+        if isinstance(value, (list, tuple)):
+            if index is not None:
+                if 0 <= index < len(value) and value[index] is not None:
+                    return str(value[index]).strip()
+                return ""
+
+            if len(value) == 1:
+                return "" if value[0] is None else str(value[0]).strip()
+
+            return ", ".join(str(item).strip() for item in value if item is not None)
+
+        return str(value).strip()
+    
+    def _get_axis_labels_source(self):
+        if self.lablaxis:
+            return self.lablaxis
+
+        if not self.labl_ptr:
+            return None
+
+        return self.dataset.nrv_data.filter(
+            variable__name=self.labl_ptr
+        ).values_list('value', flat=True).first()
+
+    def get_axis_label(self, index=None):
+        label = self._pick_axis_value(self._get_axis_labels_source(), index)
+        unit = self._pick_axis_value(self.units, index)
+
+        if label and unit:
+            return f"{label}, {unit}"
+
+        return label or unit
     
     # NRV = depend_0 is NULL AND depend_1 is NULL AND name != epoch.
     def is_nrv(self):

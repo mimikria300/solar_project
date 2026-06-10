@@ -212,7 +212,9 @@
       form.addEventListener('submit', function (event) {
         let hasError = false;
 
-        form.querySelectorAll('.dtw-input-field').forEach(function (inp) {
+        const allInputs = form.querySelectorAll('.dtw-input-field');
+
+        allInputs.forEach(function (inp) {
           const val = inp.value.trim();
           const container = inp.closest('.dtw-datetime-container').querySelector('.dtw-visible-container');
 
@@ -225,7 +227,21 @@
         if (hasError) {
           event.preventDefault();
           alert('Проверьте формат даты: yyyy-mm-dd hh:mm:ss');
+          return;
         }
+        
+        const startVal = allInputs[0].value.trim();
+        const endVal   = allInputs[1].value.trim();
+        const startDate = new Date(startVal.replace(' ', 'T'));
+        const endDate   = new Date(endVal.replace(' ', 'T'));
+
+        if (startDate >= endDate) {
+            allInputs[0].closest('.dtw-datetime-container').querySelector('.dtw-visible-container').classList.add('dtw-error');
+            allInputs[1].closest('.dtw-datetime-container').querySelector('.dtw-visible-container').classList.add('dtw-error');
+            event.preventDefault();
+            alert('Начальная дата должна быть меньше конечной.');
+        }
+
       });
     }
 	});

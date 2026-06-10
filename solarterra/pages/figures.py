@@ -2,7 +2,8 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import numpy as np
 
-XAXIS_DOMAIN = [0.0, 0.85]
+PLOT_HEIGHT = 250
+PLOT_MARGIN = dict(l=80, r=80, t=0, b=20)
 
 def scatter(plot):
 
@@ -17,16 +18,26 @@ def scatter(plot):
         x=x, y=y, connectgaps=False, mode="lines+markers"))
 
     fig.update_traces(connectgaps=False, marker=dict(size=4))
+
     fig.update_layout(
-        xaxis_range=[plot.t_start, plot.t_stop],
-        yaxis_title=plot.variable.get_axis_label(),
-        xaxis_domain=XAXIS_DOMAIN,
-        margin=dict(l=0, r=0, t=0, b=0),
+        height=PLOT_HEIGHT,
+        margin=PLOT_MARGIN,
         autosize=True,
+        showlegend=False,
     )
 
+    fig.update_xaxes(
+        range=[plot.t_start, plot.t_stop],
+        title_text='Time, UT',
+        tickfont=dict(size=14),
+    )
 
-    fig.update_yaxes(type=plot.variable.scaletyp)
+    fig.update_yaxes(
+        title_text=plot.variable.get_axis_label(),
+        type=plot.variable.scaletyp,
+        automargin=False,
+        tickfont=dict(size=14),
+    )
 
     config = {'displayModeBar': False}
 
@@ -55,19 +66,36 @@ def n_trace(plot):
             row=index + 1,
             col=1
         )
-        fig['layout'][f"yaxis{index+1}"]['title'] = plot.variable.get_axis_label(index)
-        fig['layout'][f"xaxis{index+1}"]['range'] = [plot.t_start, plot.t_stop]
-        fig['layout'][f"xaxis{index+1}"]['domain'] = XAXIS_DOMAIN
+        fig.update_yaxes(
+            title_text=plot.variable.get_axis_label(index),
+            row=index + 1,
+            col=1,
+        )
 
     fig.update_traces(marker=dict(size=4))
     
-
     fig.update_layout(
-        height=700,
-        #xaxis_range=[ts[0], ts[1]],
-        showlegend=False,
-        margin=dict(l=0, r=0, t=0, b=0),
+        height=PLOT_HEIGHT * len(fields),
+        margin=PLOT_MARGIN,
         autosize=True,
+        showlegend=False,
+    )
+
+    fig.update_xaxes(
+        range=[plot.t_start, plot.t_stop],
+        tickfont=dict(size=14),
+    )
+
+    fig.update_xaxes(
+        title_text='Time, UT',
+        row=len(fields),
+        col=1,
+        tickfont=dict(size=14),
+    )
+
+    fig.update_yaxes(
+        automargin=False,
+        tickfont=dict(size=14),
     )
 
     config = {'displayModeBar': False}
@@ -115,8 +143,9 @@ def spectrogram(plot):
                 text=colorbar_title,
                 side='right',
             ),
-            x=0.90,
-            xpad=5,
+            x=1.0,
+            xanchor='left',
+            xpad=10,
             thicknessmode="pixels",
             thickness=15,
             lenmode="fraction",
@@ -126,13 +155,22 @@ def spectrogram(plot):
     ))
 
     fig.update_layout(
-        xaxis_title='Time',
-        yaxis_title=plot.y_axis_label,
-        xaxis_range=[plot.t_start, plot.t_stop],
-        xaxis_domain=XAXIS_DOMAIN,
-        height=500,
-        margin=dict(l=0, r=0, t=0, b=0),
+        height=PLOT_HEIGHT,
+        margin=PLOT_MARGIN,
         autosize=True,
+        showlegend=False,
+    )
+
+    fig.update_xaxes(
+        range=[plot.t_start, plot.t_stop],
+        title_text='Time, UT',
+        tickfont=dict(size=14),
+    )
+
+    fig.update_yaxes(
+        title_text=plot.y_axis_label,
+        automargin=False,
+        tickfont=dict(size=14),
     )
 
     if plot.y_scaletyp == 'log':
