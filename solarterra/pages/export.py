@@ -25,16 +25,21 @@ def plain_text_generator(variables, ts_start, ts_end, aggregate=False, validate=
 
     ptm = PlainTextMeta(variables)
     ptm.set_everything()
+    ptm.info['aggregate'] = aggregate
+    ptm.info['validate'] = validate
+    ptm.info['ts_start'] = ts_start
+    ptm.info['ts_end'] = ts_end
 
     # header
     yield from ptm.stream_header()
+    #TODO: can render status from ptm info for debugging
 
     # build and run the query
     data = DataHandler(
         dataset=dataset,
         filter_field=ptm.depend_field,
-        t_start=ts_start,
-        t_stop=ts_end,
+        ts_start=ts_start,
+        ts_stop=ts_end,
         fields=ptm.dyn_fields[1:]  # exclude depend field
     )
     data.query()
@@ -54,9 +59,11 @@ def plain_text_generator(variables, ts_start, ts_end, aggregate=False, validate=
     if aggregate:
         data.set_bin_arrays()  # creates bin_edges_array and bin_centers_array
         data.set_bin_map()  # creates bin id for each value
+        ptm.info['bin_size'] = data.bin_instance.bin_seconds
         
         data.set_aggregated_data()
         rows = data.agg_data_by_record
+         
 
     else:
         data.clean_data()  # mask invalid values with None, cast to numpy object

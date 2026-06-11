@@ -13,6 +13,11 @@ from pages.plotting import get_plots
 from pages.export import plain_text_generator
 from pages.export_instances import DataHandler, PlainTextMeta, Bin
 
+'''
+NB: for convinience ts_start is always in timestamp format. 
+The corresponding value in unixtime shall be named as tu_start.
+'''
+
 #helper functions for search_view
 def _default_source_interval():
     return {
@@ -85,14 +90,14 @@ def export(request):
 
     if export_format != "plain_text": return HttpResponse("Only plain_text is implemented for now", status=501)
 
-
+    dt_str = ts_start.strftime('%Y%m%D%H%M').replace('/','') + '_' + ts_end.strftime('%Y%m%D%H%M').replace('/','')
     #CHECKPOINT: multifile handling
 
     if len(example_var_per_file) == 1:
 
         item = example_var_per_file[0]
         dataset = item.dataset
-        filename = f"{item.dataset.tag}_{item.depend_0}.txt"
+        filename = f"{dt_str}_{item.dataset.tag}_{item.depend_0}.txt"
         var_group = sources.filter(dataset=item.dataset, depend_0=item.depend_0).order_by('name')
     
 
@@ -111,8 +116,7 @@ def export(request):
     
         print(f"[EXPORT] Multiple variable groups detected. Exporting each group as a separate file, expected filecount: {len(example_var_per_file)}")
         zip_timestamp = dt.datetime.now().strftime("%Y-%d-%m-%H-%M")
-        zip_intervalstamp = ''
-        zip_filename = f"exported_data_{zip_timestamp + zip_intervalstamp}.zip"
+        zip_filename = f"exported_data_{zip_timestamp}.zip"
         with tempfile.TemporaryDirectory() as temp_dir:
             export_dir = os.path.join(temp_dir, "exported_data")
             os.makedirs(export_dir, exist_ok=True)
@@ -122,7 +126,7 @@ def export(request):
             for item in example_var_per_file:
                 print(f"[EXPORT] Processing variable group: {item.dataset.tag} {item.depend_0}")
                 var_group = sources.filter(dataset=item.dataset, depend_0=item.depend_0).order_by('name')
-                filename = f"{item.dataset.tag}_{item.depend_0}.txt"
+                filename = f"{dt_str}_{item.dataset.tag}_{item.depend_0}.txt"
                 filepath = os.path.join(export_dir, filename)
 
                 with open(filepath, 'w', encoding='utf-8') as file_handle:
@@ -169,14 +173,14 @@ def plot(request):
         )
 
     var_instances = Variable.objects.filter(id__in=source_form.cleaned_data['sources'])
-    t_start = source_form.cleaned_data['ts_start']
-    t_stop = source_form.cleaned_data['ts_end']
+    ts_start = source_form.cleaned_data['ts_start']
+    ts_stop = source_form.cleaned_data['ts_end']
     validate = source_form.cleaned_data['validate']
-    plots = get_plots(var_instances, t_start, t_stop, validate)
+    plots = get_plots(var_instances, ts_start, ts_stop, validate)
   
     context = {
-        't_start' : t_start,
-        't_stop' : t_stop,
+        't_start' : ts_start, #t_start is named like that bc is unrefactored yet in the template
+        't_stop' : ts_stop,
         'plots' : plots,
 
     }

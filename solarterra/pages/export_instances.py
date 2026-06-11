@@ -6,17 +6,22 @@ import math
 import datetime as dt
 import numpy as np
 
+'''
+NB: for convinience ts_start is always in timestamp format. 
+The corresponding value in unix time shall be named as tu_start.
+'''
+
 class DataHandler():
 
-    def __init__(self, dataset, filter_field, t_start, t_stop, fields):
+    def __init__(self, dataset, filter_field, ts_start, ts_stop, fields):
         # instance
         self.dataset = dataset
         # class
         self.data_class = dataset.dynamic.resolve_class()
 
-        # time bounds in integer form
-        self.i_start = ti(t_start)
-        self.i_stop = ti(t_stop)
+        # time bounds in timestamp form
+        self.ts_start = ts_start
+        self.ts_stop = ts_stop
         
         self.filter_field = filter_field
         self.data_fields = fields
@@ -37,13 +42,14 @@ class DataHandler():
         self.mask = None
         # bin mapping over the array of epochs
         self.bin_map = None
+        self.bin_instance = None
 
     def query(self):
 
         #building lazy query
         kwargs = {
-            "{0}__gte".format(self.filter_field): self.i_start,
-            "{0}__lt".format(self.filter_field): self.i_stop,
+            "{0}__gte".format(self.filter_field): ti(self.ts_start),
+            "{0}__lt".format(self.filter_field): ti(self.ts_stop),
         }
         self.queryset = self.data_class.objects.filter(**kwargs)
 
@@ -136,14 +142,14 @@ class DataHandler():
     #---AGGREGATION---
     def set_bin_arrays(self):
 
-        i_start = self.i_start
-        i_stop = self.i_stop
-        self.bin_instance = Bin(it(i_start), it(i_stop))
+        ts_start = self.ts_start
+        ts_stop = self.ts_stop
+        self.bin_instance = Bin(ts_start, ts_stop)
 
         # Bin edges for [start, stop] with one extra edge for right-open intervals.
         bin_edges_array = np.arange(
-            i_start,
-            i_stop + (self.bin_instance.bin_seconds),
+            ti(ts_start),
+            ti(ts_stop) + (self.bin_instance.bin_seconds),
             step=self.bin_instance.bin_seconds,
         )
         #getting rid of bins that doesn't have any epoch in them, to avoid having a lot of empty bins in case of sparse data
@@ -174,7 +180,7 @@ class DataHandler():
             var_array = self.data_by_var[idx, :]
             mask = self.mask[idx, :]
 
-            #filtering out unvalid values ant their bin indexies
+            #filtering out unvalid values and their bin indexies
             ok_bins = self.bin_map[mask]
             ok_values = var_array[mask].astype(df.data_type_instance.numpy_type)
 
@@ -182,7 +188,7 @@ class DataHandler():
             bin_id, pos, count = np.unique(ok_bins, return_index=True, return_counts=True)
             #count means for each bin
             means = np.add.reduceat(ok_values, pos, axis=0) / count
-            #restore missing bins, filling with None to pass to formatter, now in object type after all math handling
+            #restore missing empty bins, filling with None to pass to formatter, now in object type after all math handling
             agg_var_array = np.full(self.bin_centers_array.shape[0], None, dtype=object)
             agg_var_array[bin_id] = means
             agg_data_by_var.append(agg_var_array)
@@ -190,7 +196,7 @@ class DataHandler():
         agg_data_by_var = np.stack(agg_data_by_var, axis=0)
 
         #crudely throwing away the last bin, not to confuse user of why it sticks out
-        if self.bin_centers_array[-1] > self.i_stop:
+        if self.bin_centers_array[-1] > ti(self.ts_stop):
             agg_data_by_var = agg_data_by_var[:, :-1]
 
         self.agg_data_by_var = agg_data_by_var
@@ -230,9 +236,9 @@ class Bin():
     PPP = 1000
     #TODO: add wiring for setting PPP manually
 
-    def __init__(self, t_start, t_stop):
+    def __init__(self, ts_start, ts_stop):
 
-        timedelta = t_stop - t_start 
+        timedelta = ts_stop - ts_start 
         self.bin_seconds = math.ceil(timedelta.total_seconds() / self.PPP)
         self.bin_td = dt.timedelta(seconds=self.bin_seconds)
         self.half_bin = math.ceil(self.bin_seconds / 2)
@@ -266,8 +272,6 @@ class PlainTextMeta():
         #var_group should belong to a single dataset and have the same depend_0
         self.var_group = var_group
         self.dataset = var_group[0].dataset
-        # self.ti_start = ti_start
-        # self.ti_stop = ti_stop
 
         self.labels = None
         self.units = None
@@ -286,6 +290,18 @@ class PlainTextMeta():
         # prepend epoch/depend field so labels, units, formats, colwidths align with record_arrays column order
         # epoch isn't added to fields which are passed to query because it will be added as the filter_field in the query
         self.dyn_fields = [self.depend_field] + self.dyn_fields
+
+        self.info = {
+            'validate': False,
+            'unvalid_count': [],
+            'aggregate': False,
+            'bin_size': None,
+            'survived_bins': None,
+            'ts_start': None, 
+            'ts_stop': None,
+            'status': {},
+            'notes': '',
+        }
 
     def set_everything(self):
         self.set_labels_and_units()
@@ -446,10 +462,21 @@ class PlainTextMeta():
         for row in rows:
             yield self._format_row(row)
 
-    #TODO: maybe could be used to log smth
     def stream_footer(self):
         from solarterra.utils import NOW
-        yield f"# End of data in the chosen interval for the dataset: {self.dataset.tag}. \nFile generated at {NOW()}"
-        #Time interval: {ti(self)}
-
-
+        yield f"# End of data in the chosen interval for the dataset: {self.dataset.tag}.\n# File generated at {NOW()}\n"
+        if self.info['validate']:
+            yield f'# Data is validated to be in min\max bounds.\n'
+            #TODO: add counter for nulled data for each var
+            # yield f"Nulled {self.info['validation_removed_count']}" or some for-loop over every var or add tuple to "unvalid_counters", yes that
+        else:
+            yield '# Data is not validated to be in bounds.\n'
+        #TODO: once we'll got the resolution match-field, we can add max points per bin to the metainfo.
+        if self.info['aggregate']:
+            yield f"# Data is aggregated by averaging. Bin size (time delta): {self.info['bin_size']}s. Note that empty bins may be produced by gaps in data.\n"
+            #TODO: add survived bins counter
+            #Number of non-empty bins: {self.info['survived_bins']}/1000.
+        else:
+            yield "# No aggregation performed.\n"
+        
+        yield self.info['notes']
