@@ -14,6 +14,26 @@ MINOR_TICK_WIDTH = 2
 GRID_WIDTH = 2
 GRID_COLOR = "rgba(0, 0, 0, 0.15)"
 FONT_SIZE = 14
+Y_TITLE_XSHIFT = -(PLOT_MARGIN["l"] - 10)
+
+
+def add_fixed_y_title(fig, text, y=0.5):
+    fig.add_annotation(
+        xref="paper",
+        yref="paper",
+        x=0,
+        y=y,
+        xshift=Y_TITLE_XSHIFT,
+        text=text,
+        showarrow=False,
+        textangle=-90,
+        font=dict(
+            size=FONT_SIZE,
+            color=AXIS_COLOR,
+        ),
+        xanchor="center",
+        yanchor="middle",
+    )
 
 
 def apply_common_layout(fig, height):
@@ -93,10 +113,11 @@ def scatter(plot):
     )
 
     fig.update_yaxes(
-        title_text=plot.variable.get_axis_label(),
         type=plot.variable.scaletyp,
         automargin=False,
     )
+
+    add_fixed_y_title(fig, plot.variable.get_axis_label(), y=0.5)
 
     config = {'displayModeBar': False}
 
@@ -125,11 +146,6 @@ def n_trace(plot):
             row=index + 1,
             col=1
         )
-        fig.update_yaxes(
-            title_text=plot.variable.get_axis_label(index),
-            row=index + 1,
-            col=1,
-        )
 
     fig.update_traces(marker=dict(size=4))
     
@@ -149,6 +165,15 @@ def n_trace(plot):
     fig.update_yaxes(
         automargin=False,
     )
+
+    for index in range(len(fields)):
+        axis_name = "yaxis" if index == 0 else f"yaxis{index + 1}"
+        y0, y1 = getattr(fig.layout, axis_name).domain
+        add_fixed_y_title(
+            fig,
+            plot.variable.get_axis_label(index),
+            y=(y0 + y1) / 2
+        )
 
     config = {'displayModeBar': False}
     plot_div = fig.to_html(config=config, full_html=False,
@@ -224,9 +249,10 @@ def spectrogram(plot):
     )
 
     fig.update_yaxes(
-        title_text=plot.y_axis_label,
         automargin=False,
     )
+
+    add_fixed_y_title(fig, plot.y_axis_label, y=0.5)
 
     if plot.y_scaletyp == 'log':
         fig.update_yaxes(type='log')
