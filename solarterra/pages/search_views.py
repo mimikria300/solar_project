@@ -90,14 +90,15 @@ def export(request):
 
     if export_format != "plain_text": return HttpResponse("Only plain_text is implemented for now", status=501)
 
-    dt_str = ts_start.strftime('%Y%m%D%H%M').replace('/','') + '_' + ts_end.strftime('%Y%m%D%H%M').replace('/','')
+    dt_str = ts_start.strftime('%Y%m%d%H%M') + '_' + ts_end.strftime('%Y%m%d%H%M')
+    mode_tag = f"{'agg' if aggregate else 'full'}_{'val' if validate else 'raw'}"
     #CHECKPOINT: multifile handling
 
     if len(example_var_per_file) == 1:
 
         item = example_var_per_file[0]
         dataset = item.dataset
-        filename = f"{dt_str}_{item.dataset.tag}_{item.depend_0}.txt"
+        filename = f"{dt_str}_{item.dataset.tag}_{item.depend_0}_{mode_tag}.txt"
         var_group = sources.filter(dataset=item.dataset, depend_0=item.depend_0).order_by('name')
     
 
@@ -126,7 +127,7 @@ def export(request):
             for item in example_var_per_file:
                 print(f"[EXPORT] Processing variable group: {item.dataset.tag} {item.depend_0}")
                 var_group = sources.filter(dataset=item.dataset, depend_0=item.depend_0).order_by('name')
-                filename = f"{dt_str}_{item.dataset.tag}_{item.depend_0}.txt"
+                filename = f"{dt_str}_{item.dataset.tag}_{item.depend_0}_{mode_tag}.txt"
                 filepath = os.path.join(export_dir, filename)
 
                 with open(filepath, 'w', encoding='utf-8') as file_handle:

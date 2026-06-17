@@ -137,6 +137,10 @@ class DataHandler():
             clean_var_array = np.full(var_array.shape, None, dtype=object)
             clean_var_array[mask] = ok_values
             self.data_by_var[idx, :] = clean_var_array
+
+        # Keep row-wise view aligned with cleaned column-wise arrays 
+        # (otherwise it will catch object type as numeric and mess with nan)
+        self.data_by_record = self.data_by_var.T
             
 
     #---AGGREGATION---
