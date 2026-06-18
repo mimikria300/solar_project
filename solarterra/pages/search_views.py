@@ -90,9 +90,17 @@ def plot_clicked(request):
         #get plots
         plots = get_plots(var_instances, t_start, t_stop, validate)
 
+        for plot in plots:
+            print(
+                f"[invalid_values] dataset={plot.variable.dataset.tag}, "
+                f"variable={plot.variable.name}, "
+                f"invalid_values={plot.invalid_values}"
+            )
+
         context = {
             't_start' : t_start,
             't_stop' : t_stop,
+            'validate': validate,
             'plots' : plots,          
         }
         return render(request, "pages/plot_page.html", context=context)

@@ -16,6 +16,7 @@
     <div class="page-flex">
         <div class="central_page">
             <div><b>Временной интервал</b>: {{ t_start|date:'d.m.Y H:i:s' }} - {{ t_stop|date:'d.m.Y H:i:s' }}</div>
+            <div><b>Показаны только валидные</b>: {% if validate %}Да{% else %}Нет{% endif %}</div>
         </div>
     </div>
 
@@ -43,10 +44,6 @@
                 <div><b>Переменная:</b>
                     <div><b>{{ plot.variable.name }}</b> {{ plot.variable.catdesc }}</div>
                 </div>
-                <div><b># invalid_values</b>:
-                    <div>{{ plot.invalid_values }}</div>
-                </div>
-                <div><b>Показаны только валидные</b>: {% if plot.validate %}Да{% else %}Нет{% endif %}</div> 
                 <div><b>Данные агрегированы</b>: {% if plot.aggregation %}Да{% else %}Нет{% endif %}</div>
                 {% if plot.bin_instance %}<div><b>Размер бина</b>: {{ plot.bin_instance.bin_td }} (HH:MM:SS) </div>{% endif %}
             </div>
