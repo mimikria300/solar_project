@@ -5,6 +5,7 @@ from load_cdf.models import *
 from load_cdf.utils import safe_str
 from .evaluate_extras import command_logger, UploadRequired
 
+
 class Command(UploadRequired, BaseCommand):
 
     help = "#6 step in evaluation stage of the dataset upload.\n\
@@ -25,7 +26,6 @@ class Command(UploadRequired, BaseCommand):
             make_log_entry("Dynamic model instance for the dataset is already found, skipping dynamic instances creation.", "FOUND", upload=upload)
             return
 
-        # proceed to dynamic instances creation
         model_file_name = dataset.tag + ".py"
 
         dynamic_model_instance = dmi = DynamicModel(
@@ -47,7 +47,6 @@ class Command(UploadRequired, BaseCommand):
             exit(1)
     
         for variable in variables:
-            # parsing variables that contain a single array
             var_name = safe_str(variable.name)
             print(f"var '{var_name}', dims {variable.dims}, dim_sizes {variable.dim_sizes}, labels {variable.lablaxis}")
 
@@ -57,42 +56,27 @@ class Command(UploadRequired, BaseCommand):
             if variable.dims == 0:
                 dmi.df_list.append(DynamicField(
                     field_name=var_name,
-                    multipart=False,
                     is_array_field=False,
                     variable_instance=variable,
                     dynamic_model=dmi
                 ))
                 make_log_entry(f"Added dynamic field '{dmi.df_list[-1]}' for variable '{variable.name}'", upload=upload)
+
             elif variable.dims == 1:
                 if variable.dim_sizes is None:
                     make_log_entry(f"Variable '{variable.name}' with dims = {variable.dims} does not have dim_sizes set", "ERROR", upload=upload)
                     upload.terminate()
                 
-                if variable.dim_sizes <= 3 and variable.lablaxis is not None:
-                    for index in range(variable.dim_sizes):
-                        # taking parts of separate field names from the lablaxis property
-                        field_name = variable.name + '_' + variable.lablaxis[index].strip()
-                        safe_field_name = safe_str(field_name)
-                        dmi.df_list.append(DynamicField(
-                            field_name=safe_field_name,
-                            multipart=True,
-                            multipart_index=index + 1,
-                            is_array_field=False,
-                            variable_instance=variable,
-                            dynamic_model=dmi
-                        ))
-                        make_log_entry(f"Added dynamic field '{safe_field_name}' for variable '{variable.name}'", upload=upload)
-                else:
-                    dmi.df_list.append(DynamicField(
-                        field_name=var_name,
-                        multipart=False,
-                        is_array_field=True,
-                        array_size=variable.dim_sizes,
-                        variable_instance=variable,
-                        dynamic_model=dmi
-                    ))
-                    make_log_entry(
-                        f"Added ARRAY dynamic field '{var_name}' (size={variable.dim_sizes}) for variable '{variable.name}'", upload=upload)
+                dmi.df_list.append(DynamicField(
+                    field_name=var_name,
+                    is_array_field=True,
+                    array_size=variable.dim_sizes,
+                    variable_instance=variable,
+                    dynamic_model=dmi
+                ))
+                
+                make_log_entry(
+                    f"Added ARRAY dynamic field '{var_name}' (size={variable.dim_sizes}) for variable '{variable.name}'", upload=upload)
             else:
                 make_log_entry(f"Number of dimensions '{variable.dims}' in '{variable.name}' is not supported yet, skipping field creation", "WARNING", upload=upload)
                 continue

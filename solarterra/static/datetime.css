@@ -50,9 +50,10 @@
 }
 
 .dtw-choose-time {
-    width: 20px;
+    display: flex;
+    align-items: center;
+    width: 25px;
     cursor: pointer;
-    padding-top: 0.3rem;
     padding-right:0.3rem;
 }
 
