@@ -2,8 +2,93 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import numpy as np
 
+
 PLOT_HEIGHT = 250
 PLOT_MARGIN = dict(l=80, r=80, t=0, b=20)
+AXIS_COLOR = "black"
+AXIS_LINE_WIDTH = 2
+MAJOR_TICK_LEN = 8
+MAJOR_TICK_WIDTH = 2
+MINOR_TICK_LEN = 4
+MINOR_TICK_WIDTH = 2 
+GRID_WIDTH = 2
+GRID_COLOR = "rgba(0, 0, 0, 0.15)"
+FONT_SIZE = 14
+Y_TITLE_XSHIFT = -(PLOT_MARGIN["l"] - 10)
+
+
+def add_fixed_y_title(fig, text, y=0.5):
+    fig.add_annotation(
+        xref="paper",
+        yref="paper",
+        x=0,
+        y=y,
+        xshift=Y_TITLE_XSHIFT,
+        text=text,
+        showarrow=False,
+        textangle=-90,
+        font=dict(
+            size=FONT_SIZE,
+            color=AXIS_COLOR,
+        ),
+        xanchor="center",
+        yanchor="middle",
+    )
+
+
+def apply_common_layout(fig, height):
+    fig.update_layout(
+        height=height,               # высота
+        margin=PLOT_MARGIN,          # отступы
+        autosize=True,               # пересчет размера
+        showlegend=False,            # легенда
+        plot_bgcolor="white",        # внутри осей
+        paper_bgcolor="white",       # вне осей
+    )
+
+
+def apply_axis_style(fig):
+    common_axis_kwargs = dict(
+        showline=True,               # ось
+        linecolor=AXIS_COLOR,        # цвет оси
+        linewidth=AXIS_LINE_WIDTH,   # толщина оси
+        ticks="inside",              # тики внутрь
+        tickcolor=AXIS_COLOR,        # цвет тиков
+        ticklen=MAJOR_TICK_LEN,      # длина тиков
+        tickwidth=MAJOR_TICK_WIDTH,  # толщина тиков
+        tickfont=dict(               # подписи тиков
+            size=FONT_SIZE,
+            color=AXIS_COLOR,
+        ),
+        title_font=dict(             # подпись осей
+            size=FONT_SIZE,
+            color=AXIS_COLOR,
+        ),
+        showgrid=True,               # сетка
+        gridcolor=GRID_COLOR,        # цвет сетки
+        gridwidth=GRID_WIDTH,        # толщина сетки
+        zeroline=False,              # нулевая линия
+    )
+
+    # короткие тики
+    minor_axis_kwargs = dict(
+        ticks="inside",
+        ticklen=MINOR_TICK_LEN,
+        tickwidth=MINOR_TICK_WIDTH,
+        tickcolor=AXIS_COLOR,
+        showgrid=False,
+    )
+
+    fig.update_xaxes(
+        **common_axis_kwargs,
+        minor=minor_axis_kwargs,
+    )
+
+    fig.update_yaxes(
+        **common_axis_kwargs,
+        minor=minor_axis_kwargs,
+    )
+
 
 def scatter(plot):
 
@@ -19,25 +104,20 @@ def scatter(plot):
 
     fig.update_traces(connectgaps=False, marker=dict(size=4))
 
-    fig.update_layout(
-        height=PLOT_HEIGHT,
-        margin=PLOT_MARGIN,
-        autosize=True,
-        showlegend=False,
-    )
+    apply_common_layout(fig, PLOT_HEIGHT)
+    apply_axis_style(fig)
 
     fig.update_xaxes(
         range=[plot.t_start, plot.t_stop],
         title_text='Time, UT',
-        tickfont=dict(size=14),
     )
 
     fig.update_yaxes(
-        title_text=plot.variable.get_axis_label(),
         type=plot.variable.scaletyp,
         automargin=False,
-        tickfont=dict(size=14),
     )
+
+    add_fixed_y_title(fig, plot.variable.get_axis_label(), y=0.5)
 
     config = {'displayModeBar': False}
 
@@ -66,43 +146,41 @@ def n_trace(plot):
             row=index + 1,
             col=1
         )
-        fig.update_yaxes(
-            title_text=plot.variable.get_axis_label(index),
-            row=index + 1,
-            col=1,
-        )
 
     fig.update_traces(marker=dict(size=4))
     
-    fig.update_layout(
-        height=PLOT_HEIGHT * len(fields),
-        margin=PLOT_MARGIN,
-        autosize=True,
-        showlegend=False,
-    )
+    apply_common_layout(fig, PLOT_HEIGHT * len(fields) - 70)
+    apply_axis_style(fig)
 
     fig.update_xaxes(
         range=[plot.t_start, plot.t_stop],
-        tickfont=dict(size=14),
     )
 
     fig.update_xaxes(
         title_text='Time, UT',
         row=len(fields),
         col=1,
-        tickfont=dict(size=14),
     )
 
     fig.update_yaxes(
         automargin=False,
-        tickfont=dict(size=14),
     )
+
+    for index in range(len(fields)):
+        axis_name = "yaxis" if index == 0 else f"yaxis{index + 1}"
+        y0, y1 = getattr(fig.layout, axis_name).domain
+        add_fixed_y_title(
+            fig,
+            plot.variable.get_axis_label(index),
+            y=(y0 + y1) / 2
+        )
 
     config = {'displayModeBar': False}
     plot_div = fig.to_html(config=config, full_html=False,
                            div_id=f"plot_div_{plot.variable.id}", default_width="100%")
 
     return plot_div
+
 
 def spectrogram(plot):
     if plot.z_matrix is None or plot.z_matrix.size == 0:
@@ -142,6 +220,14 @@ def spectrogram(plot):
             title=dict(
                 text=colorbar_title,
                 side='right',
+                font=dict(
+                    size=FONT_SIZE,
+                    color=AXIS_COLOR,
+                ),
+            ),
+            tickfont=dict(
+                size=FONT_SIZE,
+                color=AXIS_COLOR,
             ),
             x=1.0,
             xanchor='left',
@@ -154,24 +240,19 @@ def spectrogram(plot):
         hoverongaps=False,
     ))
 
-    fig.update_layout(
-        height=PLOT_HEIGHT,
-        margin=PLOT_MARGIN,
-        autosize=True,
-        showlegend=False,
-    )
+    apply_common_layout(fig, PLOT_HEIGHT)
+    apply_axis_style(fig)
 
     fig.update_xaxes(
         range=[plot.t_start, plot.t_stop],
         title_text='Time, UT',
-        tickfont=dict(size=14),
     )
 
     fig.update_yaxes(
-        title_text=plot.y_axis_label,
         automargin=False,
-        tickfont=dict(size=14),
     )
+
+    add_fixed_y_title(fig, plot.y_axis_label, y=0.5)
 
     if plot.y_scaletyp == 'log':
         fig.update_yaxes(type='log')

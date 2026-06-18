@@ -8,22 +8,6 @@ solarterra_submodules/data_cdf/models/*.py
 
 main.py
 
-# Project specific files: migrations, data-models, config
-configs/settings.json
-
-## Generated load_cdf migrations
-solarterra/loadcdf/migrations/*.py
-!solarterra/loadcdf/migrations/__init__.py
-
-## Generated data_cdf migrations
-solarterra_submodules/data_cdf/migrations/*.py
-!solarterra_submodules/data_cdf/migrations/__init__.py
-
-## Generated data_cdf model/dataclass files
-solarterra_submodules/data_cdf/models/*.py
-!solarterra_submodules/data_cdf/models/__init__.py
-
-# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class

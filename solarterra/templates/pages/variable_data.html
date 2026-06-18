@@ -52,10 +52,6 @@
 					<td>{{ variable.dynamic.first.data_type_instance.numpy_type }}</td>
 				</tr>
 				<tr>
-					<th>fields</th>
-					<td>{{ variable.get_list_of_fields }}</td>
-				</tr>
-				<tr>
 					<th colspan="2" >cdf attributes ({{ variable.attributes.count }})</th>
 				</tr>
 				{% for attribute in variable.ordered_attributes %}

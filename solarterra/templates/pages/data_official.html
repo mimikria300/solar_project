@@ -104,6 +104,12 @@
 						<div>{% if var.is_displayed %}[is_displayed] {% endif %}<a href="{% url 'variable' var.id %}"><b>{{ var.name }}</b> {{ var.catdesc }}</a></div>
 					{% endfor %}</td>
 				</tr>
+				<tr>
+					<th>ignore_data&nbsp;({{ dataset.ignore_variables.count }})</th>
+					<td>{% for var in dataset.ignore_variables %} 
+						<div>{% if var.is_displayed %}[is_displayed] {% endif %}<a href="{% url 'variable' var.id %}"><b>{{ var.name }}</b> {{ var.catdesc }}</a></div>
+					{% endfor %}</td>
+				</tr>
 				</tbody>
 				</table>
 

@@ -39,7 +39,7 @@ class Command(UploadRequired, BaseCommand):
         make_log_entry(f"Saved Dynamic Model instance for dataset {dataset.tag}", "CREATED", upload=upload)
 
         # dims attribute is unset (null) on variables that contain a single entry (scalar), not an array, e.g. axi(e)s label(s), so filtering them out here
-        variables = dataset.variables.filter(dims__isnull=False)
+        variables = dataset.variables.filter(dims__isnull=False).exclude(var_logic_type='ignore_data')
         make_log_entry(f"Data from {variables.count()}/{dataset.variables.count()} variables will be saved in the db.", "INFO", upload=upload)
         
         if variables.count() == 0:

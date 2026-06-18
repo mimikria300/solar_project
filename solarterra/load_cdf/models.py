@@ -224,7 +224,10 @@ class Dataset(models.Model):
         return self.variables.filter(var_logic_type="support_data").order_by('name')
     
     def meta_variables(self):
-        return self.variables.filter(var_logic_type="meta_data").order_by('name')
+        return self.variables.filter(var_logic_type="metadata").order_by('name')
+    
+    def ignore_variables(self):
+        return self.variables.filter(var_logic_type="ignore_data").order_by('name')
     
     def get_time_range(self):
         if not hasattr(self, 'dynamic'):
@@ -250,9 +253,9 @@ class Dataset(models.Model):
         max_time = result['max_time']
         
         if min_time is not None:
-            min_time = bigint_ts_resolver(min_time)
+            min_time = it(min_time)
         if max_time is not None:
-            max_time = bigint_ts_resolver(max_time)
+            max_time = it(max_time)
 
         epoch_variable = epoch_field.variable_instance
         _dt_fmt = "%d-%b-%Y %H:%M:%S.%f"

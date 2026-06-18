@@ -83,32 +83,68 @@ function getPlot() {
     
 }
 
-function selectAllInDataset(datasetBlockId) {
-    let datasetBlock = document.getElementById(datasetBlockId);
+// function selectAllInDataset(datasetBlockId) {
+//     let datasetBlock = document.getElementById(datasetBlockId);
     
-    let checkboxes = datasetBlock.querySelectorAll('.variable-choice');
+//     let checkboxes = datasetBlock.querySelectorAll('.variable-choice');
     
+//     checkboxes.forEach(function(checkbox) {
+//         checkbox.checked = true;
+
+//         let variableId = checkbox.id.replace('poser-', '');
+//         checkOnetoOne(variableId);
+//     });
+    
+//     countVars('variable-choice', 'var-count');
+// }
+
+// function deselectAllInDataset(datasetBlockId) {
+//     let datasetBlock = document.getElementById(datasetBlockId);
+    
+//     let checkboxes = datasetBlock.querySelectorAll('.variable-choice');
+    
+//     checkboxes.forEach(function(checkbox) {
+//         checkbox.checked = false;
+
+//         let variableId = checkbox.id.replace('poser-', '');
+//         checkOnetoOne(variableId);
+//     });
+    
+//     countVars('variable-choice', 'var-count');
+// }
+
+function setCheckboxesInContainer(containerId, checked) {
+    let container = document.getElementById(containerId);
+
+    if (!container) {
+        console.log(`Container not found: ${containerId}`);
+        return;
+    }
+
+    let checkboxes = container.querySelectorAll('.variable-choice');
+
     checkboxes.forEach(function(checkbox) {
-        checkbox.checked = true;
+        checkbox.checked = checked;
 
         let variableId = checkbox.id.replace('poser-', '');
         checkOnetoOne(variableId);
     });
-    
+
     countVars('variable-choice', 'var-count');
 }
 
-function deselectAllInDataset(datasetBlockId) {
-    let datasetBlock = document.getElementById(datasetBlockId);
-    
-    let checkboxes = datasetBlock.querySelectorAll('.variable-choice');
-    
-    checkboxes.forEach(function(checkbox) {
-        checkbox.checked = false;
+function selectAllInDataset(datasetBlockId) {
+    setCheckboxesInContainer(datasetBlockId, true);
+}
 
-        let variableId = checkbox.id.replace('poser-', '');
-        checkOnetoOne(variableId);
-    });
-    
-    countVars('variable-choice', 'var-count');
+function deselectAllInDataset(datasetBlockId) {
+    setCheckboxesInContainer(datasetBlockId, false);
+}
+
+function selectAllInContainer(containerId) {
+    setCheckboxesInContainer(containerId, true);
+}
+
+function deselectAllInContainer(containerId) {
+    setCheckboxesInContainer(containerId, false);
 }

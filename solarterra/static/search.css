@@ -26,6 +26,11 @@
 	margin-bottom: 1rem;
 }
 
+.container-buttons, .change-buttons {
+    margin-bottom: 0.5rem;
+    margin-top: 0.5rem;
+}
+
 .dataset-buttons {
     margin-left: 4rem;
     margin-bottom: 0.5rem;
@@ -45,6 +50,7 @@
 .dataset-btn:hover {
     background-color: #e0e0e0;
     border-color: #999;
+	color: inherit;
 }
 
 .dataset-btn:active {

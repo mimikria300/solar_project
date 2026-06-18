@@ -23,10 +23,19 @@
 
 <div>
     <div><b>Выбранные миссии:</b> {{ selected_missions|join:", " }}</div>
-    <div><a href="{% url 'select_missions' %}">Изменить миссии</a></div>
+    <div class="change-buttons"><a href="{% url 'select_missions' %}" class="dataset-btn">Изменить миссии</a></div>
 </div>
 
-<div>
+<div class="container-buttons">
+	<button type="button" class="dataset-btn" onclick="event.stopPropagation(); selectAllInContainer('datasets-container');">
+		Выбрать все
+	</button>
+	<button type="button" class="dataset-btn" onclick="event.stopPropagation(); deselectAllInContainer('datasets-container');">
+		Очистить
+	</button>
+</div>
+
+<div id="datasets-container">
 {% regroup datasets by mission as missions %}
 {% for mission in missions  %}
 <div class="mission"  onclick="changeVisibility('mission-list-{{ forloop.counter }}');">{{ mission.grouper }} ({{ mission.list|length }})</div>

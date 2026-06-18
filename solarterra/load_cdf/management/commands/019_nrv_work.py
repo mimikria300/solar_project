@@ -24,7 +24,7 @@ class Command(UploadRequired, BaseCommand):
             make_log_entry(f"NRV data for '{dataset.tag}' already exists ({dataset.nrv_data.count()} entries), skipping.", "FOUND", upload=upload)
             return
 
-        nrv_variables = [v for v in dataset.variables.filter(dims__isnull=False) if v.is_nrv()]
+        nrv_variables = [v for v in dataset.variables.filter(dims__isnull=False).exclude(var_logic_type='ignore_data') if v.is_nrv()]
 
         if not nrv_variables:
             make_log_entry(f"Not found NRV variables for '{dataset.tag}'.", "INFO", upload=upload)
