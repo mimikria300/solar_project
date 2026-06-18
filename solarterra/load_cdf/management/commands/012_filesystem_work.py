@@ -40,7 +40,9 @@ class Command(UploadRequired, BaseCommand):
             extracted_files = os.listdir(temp_dir)
             make_log_entry(f"Extracted {len(extracted_files)} files", upload=upload)
 
-            files_to_save = extracted_files
+            files_to_register = extracted_files
+            new_files = extracted_files
+            replaced_files = []
 
             if no_mv:
                 make_log_entry(f"FLAG --no-mv SET, NO SEARCH OF THE FILESYSTEM IS DONE!", upload=upload)
@@ -56,39 +58,46 @@ class Command(UploadRequired, BaseCommand):
                     make_log_entry(f"Dataset directory already exists: {dataset_dir_path}, proceeding to detect file collisions", "FOUND_EXISTING", upload=upload)
                     existing_files = set(os.listdir(dataset_dir_path))
                 
-                collisions = [f for f in extracted_files if f in existing_files]
-                files_to_save = [f for f in extracted_files if f not in existing_files]
+                replaced_files = [f for f in extracted_files if f in existing_files]
+                new_files = [f for f in extracted_files if f not in existing_files]
 
-                if collisions:
+                if replaced_files:
                         collision_logs_txt = os.path.join(settings.COLLISIONS_LOG_DIR, f"{upload.dataset.tag}_{upload.u_tag}_collisions.txt")
                         with open(collision_logs_txt, 'w+') as f:
-                            f.write("\n".join(collisions))
-                        make_log_entry(f"{len(collisions)} collisions found for dataset {upload.dataset.tag}. Collisions saved in the {collision_logs_txt}", "WARNING", upload=upload)
+                            f.write("\n".join(replaced_files))
+                            make_log_entry(
+                                f"{len(replaced_files)} collisions found for dataset {upload.dataset.tag}. "
+                                f"These files will be replaced with newer versions. "
+                                f"Collisions saved in {collision_logs_txt}",
+                                "INFO",
+                                upload=upload
+                            )
                 else:
                     make_log_entry(f"No collisions found for dataset {upload.dataset.tag}.", "SUCCESS", upload=upload)
 
             if no_mv:
                 make_log_entry(f"FLAG --no-mv SET, NO ACTUAL COPY OF THE FILES IS DONE!", upload=upload)
             else:
-                if files_to_save:
-                    make_log_entry(f"Copying {len(files_to_save)} new files to dataset directory...", upload=upload)
+                if files_to_register:
+                    make_log_entry(
+                        f"Copying {len(new_files)} new files and replacing {len(replaced_files)} existing files...", upload=upload)
 
-                    for cdf_filename in files_to_save:
+                    for cdf_filename in files_to_register:
                         src = os.path.join(temp_dir, cdf_filename)
                         dst = os.path.join(dataset_dir_path, cdf_filename)
                         shutil.copy2(src, dst)
 
-                    make_log_entry(f"Saved {len(files_to_save)} new files to {dataset_dir_path}", "SUCCESS", upload=upload)
+                    make_log_entry(f"Saved/replaced {len(files_to_register)} files in {dataset_dir_path}", "SUCCESS", upload=upload)
                 else:
-                    make_log_entry(f"All extracted files already exist in {dataset_dir_path}. No new files were copied.", "INFO",upload=upload)
+                    make_log_entry("No files found in archive.", "INFO", upload=upload)
 
             cdf_stored_instances = [CDFFileStored(
                 full_path=os.path.join(dataset_dir_path, cdf_filename),
                 upload=upload
-            ) for cdf_filename in files_to_save]
+            ) for cdf_filename in files_to_register]
 
             if cdf_stored_instances:
                 CDFFileStored.objects.bulk_create(cdf_stored_instances)
                 make_log_entry(f"Saved {len(cdf_stored_instances)} instances of CDFFileStored", "CREATED", upload=upload)
             else:
-                make_log_entry(f"No new CDFFileStored instances were created.", "INFO", upload=upload)
+                make_log_entry(f"No CDFFileStored instances were created.", "INFO", upload=upload)

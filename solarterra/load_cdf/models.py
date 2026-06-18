@@ -224,7 +224,10 @@ class Dataset(models.Model):
         return self.variables.filter(var_logic_type="support_data").order_by('name')
     
     def meta_variables(self):
-        return self.variables.filter(var_logic_type="meta_data").order_by('name')
+        return self.variables.filter(var_logic_type="metadata").order_by('name')
+    
+    def ignore_variables(self):
+        return self.variables.filter(var_logic_type="ignore_data").order_by('name')
     
     def get_time_range(self):
         if not hasattr(self, 'dynamic'):
@@ -250,9 +253,9 @@ class Dataset(models.Model):
         max_time = result['max_time']
         
         if min_time is not None:
-            min_time = bigint_ts_resolver(min_time)
+            min_time = it(min_time)
         if max_time is not None:
-            max_time = bigint_ts_resolver(max_time)
+            max_time = it(max_time)
 
         epoch_variable = epoch_field.variable_instance
         _dt_fmt = "%d-%b-%Y %H:%M:%S.%f"
@@ -360,6 +363,7 @@ class Variable(models.Model):
     # all JSON fields are expected to contain lists of strings (lists of lists for spectrogramms)
     output_format = models.JSONField(blank=True, null=True)
     lablaxis = models.JSONField(blank=True, null=True)
+    labl_ptr = models.CharField(max_length=200, blank=True, null=True)
     units = models.JSONField(blank=True, null=True)
     validmin = models.JSONField(blank=True, null=True)
     validmax = models.JSONField(blank=True, null=True)
@@ -402,18 +406,42 @@ class Variable(models.Model):
     def ordered_attributes(self):
         return self.attributes.order_by('title')
 
-    def get_axis_label(self, index=None):
-        if not hasattr(self, 'lablaxis') or self.lablaxis is None:
-            label = ""
-        else:
-            label = self.lablaxis[index] if index is not None else self.lablaxis
-        if self.units is not None:
-            if index is not None and not isinstance(self.units, str):
-                label += f", {self.units[index]}"    
-            else:
-                label += f", {self.units}"
+    def _pick_axis_value(self, value, index=None):
+        if value is None:
+            return ""
 
-        return label
+        if isinstance(value, (list, tuple)):
+            if index is not None:
+                if 0 <= index < len(value) and value[index] is not None:
+                    return str(value[index]).strip()
+                return ""
+
+            if len(value) == 1:
+                return "" if value[0] is None else str(value[0]).strip()
+
+            return ", ".join(str(item).strip() for item in value if item is not None)
+
+        return str(value).strip()
+    
+    def _get_axis_labels_source(self):
+        if self.lablaxis:
+            return self.lablaxis
+
+        if not self.labl_ptr:
+            return None
+
+        return self.dataset.nrv_data.filter(
+            variable__name=self.labl_ptr
+        ).values_list('value', flat=True).first()
+
+    def get_axis_label(self, index=None):
+        label = self._pick_axis_value(self._get_axis_labels_source(), index)
+        unit = self._pick_axis_value(self.units, index)
+
+        if label and unit:
+            return f"{label}, {unit}"
+
+        return label or unit
     
     # NRV = depend_0 is NULL AND depend_1 is NULL AND name != epoch.
     def is_nrv(self):
@@ -533,12 +561,6 @@ class DynamicField(models.Model):
     # string reference to existing MODEL FIELD
     field_name = models.CharField(max_length=100)
 
-    # is it made from multiple vars?
-    multipart = models.BooleanField(default=False)
-
-    #1-based multipart index
-    multipart_index = models.PositiveSmallIntegerField(blank=True, null=True)
-
     # field stores values in ArrayField?
     is_array_field = models.BooleanField(default=False, blank=True)
     array_size = models.PositiveIntegerField(null=True, blank=True)
@@ -562,17 +584,33 @@ class DynamicField(models.Model):
         return self.field_name
 
     def get_format_str(self):
+        '''
+        Can be a single str for dims = 0, always a list for dims = 1. Dims > 1 is not supported yet.
+        '''
+        var = self.variable_instance
         format_str = None
-        if self.variable_instance.output_format is not None:
-            if isinstance(self.variable_instance.output_format, list):
-                format_str = self.variable_instance.output_format[self.multipart_index - 1]
-            else:
-                format_str = self.variable_instance.output_format
+        if var.output_format is not None:
+            if var.dims == 0:
+                format_str = var.output_format
+            elif var.dims == 1:
+                #it can be a single value or a list already, make it a list always
+                if isinstance(var.output_format, list):
+                    format_str = var.output_format
+                else:
+                    format_str = [var.output_format] * var.dim_sizes
         return format_str
 
     def set_format_function(self):
+        '''Correct usage for a single record of multipart field: formatted_list = [f(val) for f,val in zip(field.format_function, field_values)]
+        Or can be called like field.format_function[0](val_0)'''
+        
         format_str = self.get_format_str()
-        self.format_function = self.make_format_function(self.data_type_instance, format_str)
+        if isinstance(format_str, list): 
+            self.format_function = [self.make_format_function(self.data_type_instance, fs) for fs in format_str]
+        else:
+            self.format_function = self.make_format_function(self.data_type_instance, format_string)
+
+        return format_function
 
     @staticmethod
     def make_format_function(type_instance, format_str):

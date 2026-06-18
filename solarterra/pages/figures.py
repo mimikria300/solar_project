@@ -2,7 +2,93 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import numpy as np
 
-XAXIS_DOMAIN = [0.0, 0.85]
+
+PLOT_HEIGHT = 250
+PLOT_MARGIN = dict(l=80, r=80, t=0, b=20)
+AXIS_COLOR = "black"
+AXIS_LINE_WIDTH = 2
+MAJOR_TICK_LEN = 8
+MAJOR_TICK_WIDTH = 2
+MINOR_TICK_LEN = 4
+MINOR_TICK_WIDTH = 2 
+GRID_WIDTH = 2
+GRID_COLOR = "rgba(0, 0, 0, 0.15)"
+FONT_SIZE = 14
+Y_TITLE_XSHIFT = -(PLOT_MARGIN["l"] - 10)
+
+
+def add_fixed_y_title(fig, text, y=0.5):
+    fig.add_annotation(
+        xref="paper",
+        yref="paper",
+        x=0,
+        y=y,
+        xshift=Y_TITLE_XSHIFT,
+        text=text,
+        showarrow=False,
+        textangle=-90,
+        font=dict(
+            size=FONT_SIZE,
+            color=AXIS_COLOR,
+        ),
+        xanchor="center",
+        yanchor="middle",
+    )
+
+
+def apply_common_layout(fig, height):
+    fig.update_layout(
+        height=height,               # высота
+        margin=PLOT_MARGIN,          # отступы
+        autosize=True,               # пересчет размера
+        showlegend=False,            # легенда
+        plot_bgcolor="white",        # внутри осей
+        paper_bgcolor="white",       # вне осей
+    )
+
+
+def apply_axis_style(fig):
+    common_axis_kwargs = dict(
+        showline=True,               # ось
+        linecolor=AXIS_COLOR,        # цвет оси
+        linewidth=AXIS_LINE_WIDTH,   # толщина оси
+        ticks="inside",              # тики внутрь
+        tickcolor=AXIS_COLOR,        # цвет тиков
+        ticklen=MAJOR_TICK_LEN,      # длина тиков
+        tickwidth=MAJOR_TICK_WIDTH,  # толщина тиков
+        tickfont=dict(               # подписи тиков
+            size=FONT_SIZE,
+            color=AXIS_COLOR,
+        ),
+        title_font=dict(             # подпись осей
+            size=FONT_SIZE,
+            color=AXIS_COLOR,
+        ),
+        showgrid=True,               # сетка
+        gridcolor=GRID_COLOR,        # цвет сетки
+        gridwidth=GRID_WIDTH,        # толщина сетки
+        zeroline=False,              # нулевая линия
+    )
+
+    # короткие тики
+    minor_axis_kwargs = dict(
+        ticks="inside",
+        ticklen=MINOR_TICK_LEN,
+        tickwidth=MINOR_TICK_WIDTH,
+        tickcolor=AXIS_COLOR,
+        showgrid=False,
+    )
+
+    fig.update_xaxes(
+        **common_axis_kwargs,
+        minor=minor_axis_kwargs,
+    )
+
+    fig.update_yaxes(
+        **common_axis_kwargs,
+        minor=minor_axis_kwargs,
+    )
+
 
 def scatter(plot):
 
@@ -17,14 +103,21 @@ def scatter(plot):
         x=x, y=y, connectgaps=False, mode="lines+markers"))
 
     fig.update_traces(connectgaps=False, marker=dict(size=4))
-    fig.update_layout(
-        xaxis_range=[plot.t_start, plot.t_stop],
-        yaxis_title=plot.variable.get_axis_label(),
-        xaxis_domain=XAXIS_DOMAIN,
+
+    apply_common_layout(fig, PLOT_HEIGHT)
+    apply_axis_style(fig)
+
+    fig.update_xaxes(
+        range=[plot.t_start, plot.t_stop],
+        title_text='Time, UT',
     )
 
+    fig.update_yaxes(
+        type=plot.variable.scaletyp,
+        automargin=False,
+    )
 
-    fig.update_yaxes(type=plot.variable.scaletyp)
+    add_fixed_y_title(fig, plot.variable.get_axis_label(), y=0.5)
 
     config = {'displayModeBar': False}
 
@@ -45,32 +138,49 @@ def n_trace(plot):
     for index, field in enumerate(fields):
         x, y = plot.get_values(index)
         fig.add_trace(go.Scatter(
-            x=plot.x_field_array,
-            y=plot.y_arrays[index],
+            x=x,
+            y=y,
             connectgaps=False,
             mode="lines+markers",
         ),
             row=index + 1,
             col=1
         )
-        fig['layout'][f"yaxis{index+1}"]['title'] = plot.variable.get_axis_label(index)
-        fig['layout'][f"xaxis{index+1}"]['range'] = [plot.t_start, plot.t_stop]
-        fig['layout'][f"xaxis{index+1}"]['domain'] = XAXIS_DOMAIN
 
     fig.update_traces(marker=dict(size=4))
     
+    apply_common_layout(fig, PLOT_HEIGHT * len(fields) - 70)
+    apply_axis_style(fig)
 
-    fig.update_layout(
-        height=700,
-        #xaxis_range=[ts[0], ts[1]],
-        showlegend=False,
+    fig.update_xaxes(
+        range=[plot.t_start, plot.t_stop],
     )
+
+    fig.update_xaxes(
+        title_text='Time, UT',
+        row=len(fields),
+        col=1,
+    )
+
+    fig.update_yaxes(
+        automargin=False,
+    )
+
+    for index in range(len(fields)):
+        axis_name = "yaxis" if index == 0 else f"yaxis{index + 1}"
+        y0, y1 = getattr(fig.layout, axis_name).domain
+        add_fixed_y_title(
+            fig,
+            plot.variable.get_axis_label(index),
+            y=(y0 + y1) / 2
+        )
 
     config = {'displayModeBar': False}
     plot_div = fig.to_html(config=config, full_html=False,
                            div_id=f"plot_div_{plot.variable.id}", default_width="100%")
 
     return plot_div
+
 
 def spectrogram(plot):
     if plot.z_matrix is None or plot.z_matrix.size == 0:
@@ -110,9 +220,18 @@ def spectrogram(plot):
             title=dict(
                 text=colorbar_title,
                 side='right',
+                font=dict(
+                    size=FONT_SIZE,
+                    color=AXIS_COLOR,
+                ),
             ),
-            x=0.90,
-            xpad=5,
+            tickfont=dict(
+                size=FONT_SIZE,
+                color=AXIS_COLOR,
+            ),
+            x=1.0,
+            xanchor='left',
+            xpad=10,
             thicknessmode="pixels",
             thickness=15,
             lenmode="fraction",
@@ -121,13 +240,19 @@ def spectrogram(plot):
         hoverongaps=False,
     ))
 
-    fig.update_layout(
-        xaxis_title='Time',
-        yaxis_title=plot.y_axis_label,
-        xaxis_range=[plot.t_start, plot.t_stop],
-        xaxis_domain=XAXIS_DOMAIN,
-        height=500,
+    apply_common_layout(fig, PLOT_HEIGHT)
+    apply_axis_style(fig)
+
+    fig.update_xaxes(
+        range=[plot.t_start, plot.t_stop],
+        title_text='Time, UT',
     )
+
+    fig.update_yaxes(
+        automargin=False,
+    )
+
+    add_fixed_y_title(fig, plot.y_axis_label, y=0.5)
 
     if plot.y_scaletyp == 'log':
         fig.update_yaxes(type='log')

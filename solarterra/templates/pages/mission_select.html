@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% load static %}
+
+{% block page_title %}
+    Выбор миссий
+{% endblock %}
+
+{% block page_css %}
+    <link rel="stylesheet" href="{% static 'form.css' %}">
+    <link rel="stylesheet" href="{% static 'search.css' %}">
+{% endblock %}
+
+{% block page %}
+
+<div class="page-title">
+    1. Выбор миссий
+</div>
+
+<form method="post">
+    {% csrf_token %}
+
+    {% for checkbox in form.missions %}
+        <div class="mission">
+            <label for="{{ checkbox.id_for_label }}">
+                {{ checkbox.tag }}
+                {{ checkbox.choice_label }}
+            </label>
+        </div>
+    {% endfor %}
+
+    <div>{{ form.missions.errors }}</div>
+    <div>{{ form.non_field_errors }}</div>
+
+    <div>
+        <button class="btn" type="submit">Далее</button>
+    </div>
+</form>
+
+{% endblock %}

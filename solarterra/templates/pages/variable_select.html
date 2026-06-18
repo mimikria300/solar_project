@@ -3,7 +3,7 @@
 {% load static %}
 
 {% block page_title %}
-    Поиск по наборам данных
+    Выбор переменных
 {% endblock %}
 
 {% block page_css %}
@@ -14,15 +14,28 @@
 
 {% block page %}
 
-{{ source_form.media }}
+{{ var_form.media }}
 
 
 <div class="page-title">
-    1. Выбор переменных
+    2. Выбор переменных
 </div>
 
-
 <div>
+    <div><b>Выбранные миссии:</b> {{ selected_missions|join:", " }}</div>
+    <div class="change-buttons"><a href="{% url 'select_missions' %}" class="dataset-btn">Изменить миссии</a></div>
+</div>
+
+<div class="container-buttons">
+	<button type="button" class="dataset-btn" onclick="event.stopPropagation(); selectAllInContainer('datasets-container');">
+		Выбрать все
+	</button>
+	<button type="button" class="dataset-btn" onclick="event.stopPropagation(); deselectAllInContainer('datasets-container');">
+		Очистить
+	</button>
+</div>
+
+<div id="datasets-container">
 {% regroup datasets by mission as missions %}
 {% for mission in missions  %}
 <div class="mission"  onclick="changeVisibility('mission-list-{{ forloop.counter }}');">{{ mission.grouper }} ({{ mission.list|length }})</div>
@@ -55,31 +68,32 @@
 
 <div>Выбрано: <span id="var-count">0</span></div>
 
+<div>{{ var_form.variables.errors }}</div>
 
-<div id="step-2" {% if fresh %} hidden {% endif %}>
-	<form id="form" method="post">
-
+<div id="step-2" {% if not has_errors %}hidden{% endif %}>
+	<form id="var_form" method="post" action="{% url 'select_variables' %}" target="_blank">
+	
 	{% csrf_token %}
-	<div hidden>{{ source_form.sources }}</div>
-	<div class="page-title">2. Выбор временного диапазона</div>
+	<div hidden>{{ var_form.variables }}</div>
+	<div class="page-title">3. Выбор временного диапазона</div>
 
 	<div class="simple-flex">
-		<div>{{ source_form.ts_start.label }}</div>
-		<div>{{ source_form.ts_start }}</div>
+		<div>{{ var_form.ts_start.label }}</div>
+		<div>{{ var_form.ts_start }}</div>
 	</div>
-	<div>{{ source_form.errors.ts_start }}</div>
+	<div>{{ var_form.errors.ts_start }}</div>
 
 	<div class="simple-flex">
-		<div>{{ source_form.ts_end.label }}</div>
-		<div>{{ source_form.ts_end }}</div>
+		<div>{{ var_form.ts_end.label }}</div>
+		<div>{{ var_form.ts_end }}</div>
 	</div>
-	<div>{{ source_form.errors.ts_end }}</div>
+	<div>{{ var_form.errors.ts_end }}</div>
 
-	<div>{{ source_form.validate }} <label for="id_validate"> {{ source_form.validate.label }}</label></div>
+	<div>{{ var_form.validate }} <label for="id_validate"> {{ var_form.validate.label }}</label></div>
 
 
 	<div>
-		{{ source_form.non_field_errors }}
+		{{ var_form.non_field_errors }}
 		{{ plot_form.non_field_errors }}
 		{{ export_form.non_field_errors }}
 	</div>
@@ -95,8 +109,8 @@
 	</div>
 
 	<div>
-		<button class="btn" type="submit" formaction="{% url 'plot' %}" formtarget="_blank">Поcтроить</button>
-		<button class="btn" type="submit" formaction="{% url 'export' %}" formtarget="_blank">Экспортировать данные</button>
+		<button class="btn" type="submit" formaction="{% url 'plot_clicked' %}" formtarget="_blank">Поcтроить</button>
+		<button class="btn" type="submit" formaction="{% url 'export_clicked' %}" formtarget="_blank">Экспортировать данные</button>
 	</div>
 
 	</form>

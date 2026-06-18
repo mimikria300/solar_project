@@ -366,7 +366,8 @@ function dtw_chooseTimeOption(element) {
     document.getElementById(`${prefix}-second-${targetEl.dataset.seconds}`).classList.add("dtw-time-option-selected");
        
     targetEl.value = `${targetEl.dataset.year}-${targetEl.dataset.months}-${targetEl.dataset.days} ${targetEl.dataset.hours}:${targetEl.dataset.minutes}:${targetEl.dataset.seconds}`;
-  
+    targetEl.dispatchEvent(new Event('input'));
+    
     confButtonChange(prefix, true);
 }
 
@@ -385,7 +386,8 @@ function dtw_chooseDateOption(element) {
     dtw_buttonExchange(targetEl.id, false);
 
     targetEl.value = `${targetEl.dataset.year}-${targetEl.dataset.months}-${targetEl.dataset.days} ${targetEl.dataset.hours}:${targetEl.dataset.minutes}:${targetEl.dataset.seconds}`;
-  
+    targetEl.dispatchEvent(new Event('input'));
+    
     dtw_launchRerender(element);
     confButtonChange(targetEl.id, true);
 }
@@ -430,33 +432,26 @@ function confButtonChange(prefix, change) {
 function dtw_buttonExchange(prefix, clear) {
     let clearTimeButton = document.getElementById(`${prefix}-clear-datetime`);
     let chooseTimeButton = document.getElementById(`${prefix}-choose-datetime`);
-
-    if (clear) {
-        show(chooseTimeButton);
-        hide(clearTimeButton);
-    } else {
-        hide(chooseTimeButton);
-        show(clearTimeButton);
-    }
+    show(clearTimeButton);
+    show(chooseTimeButton);
 }
 
 
-function dtw_clearInput(clearEl, element_id) {    
+function dtw_clearInput(clearEl, element_id) {
     let targetEl = document.getElementById(element_id);
+    let elementContainer = document.getElementById(`${element_id}-datetime-container`);
+
     targetEl.value = '';
     targetEl.dataset.hours = '00';
-
-    elementContainer = document.getElementById(`${prefix}-datetime-container`);
-    removeClassFromClass(elementContainer, "dtw-js-hours", "dtw-time-option-selected");
     targetEl.dataset.minutes = '00';
-    removeClassFromClass(elementContainer, "dtw-js-minutes", "dtw-time-option-selected");
     targetEl.dataset.seconds = '00';
+
+    removeClassFromClass(elementContainer, "dtw-js-hours", "dtw-time-option-selected");
+    removeClassFromClass(elementContainer, "dtw-js-minutes", "dtw-time-option-selected");
     removeClassFromClass(elementContainer, "dtw-js-seconds", "dtw-time-option-selected");
-    
+
     dtw_buttonExchange(element_id, true);
     confButtonChange(element_id, false);
-    
-    document.getElementById('hour-00').scrollIntoView({ behavior: "smooth"});
-    document.getElementById('minute-00').scrollIntoView({ behavior: "smooth"});
-    document.getElementById('second-00').scrollIntoView({ behavior: "smooth"});        
+
+    targetEl.dispatchEvent(new Event('input'));
 }

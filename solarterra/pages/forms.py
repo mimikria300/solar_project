@@ -1,10 +1,7 @@
 from django.core.exceptions import ValidationError
-from data_cdf.models import *
-from load_cdf.models import Variable
+from load_cdf.models import Dataset, Variable
 from django import forms
-import datetime as dt
-from django.db.models import Q
-from django.forms import Widget
+
 
 class DateTimeWidget(forms.DateTimeInput):
 
@@ -38,14 +35,39 @@ class CustomCheckboxSelectMultiple(forms.CheckboxSelectMultiple):
 
         return option
 
+class MissionSelectForm(forms.Form):
+    missions = forms.MultipleChoiceField(
+        label="Миссии",
+        required=True,
+        widget=forms.CheckboxSelectMultiple,
+        error_messages={
+            "required": "Выберите хотя бы одну миссию."
+        }
+    )
 
-class SourceForm(forms.Form):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
-    sources = forms.ModelMultipleChoiceField(
-        label="Загруженные наборы данных",
-        queryset=Variable.objects.plottable(),
+        mission_values = (
+            Dataset.objects.have_data()
+            .exclude(mission__isnull=True)
+            .exclude(mission="")
+            .values_list("mission", flat=True)
+            .distinct()
+            .order_by("mission")
+        )
+
+        self.fields["missions"].choices = [(mission, mission) for mission in mission_values]
+
+class VariableSelectForm(forms.Form):
+    variables = forms.ModelMultipleChoiceField(
+        label="Переменные",
+        queryset=Variable.objects.none(),
         widget=CustomCheckboxSelectMultiple(),
         required=True,
+        error_messages={
+            "required": "Выберите хотя бы одну переменную."
+        }
     )
 
     ts_start = forms.DateTimeField(
@@ -75,6 +97,18 @@ class SourceForm(forms.Form):
         required=False
     )
 
+    def __init__(self, *args, missions=None, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        queryset = Variable.objects.plottable()
+
+        if missions:
+            queryset = queryset.filter(dataset__mission__in=missions)
+        else:
+            queryset = queryset.none()
+
+        self.fields["variables"].queryset = queryset
+
     def clean(self):
         cleaned_data = super().clean()
         ts_start = cleaned_data.get("ts_start")
@@ -82,14 +116,13 @@ class SourceForm(forms.Form):
 
         if ts_start is not None and ts_end is not None:
             if ts_start >= ts_end:
-                raise ValidationError("Start time should be before end time.")
+                raise ValidationError("Начальная дата должна быть раньше конечной.")
         return cleaned_data
         
 class PlotForm(forms.Form):
     ''' A stub for placing plot parameters later '''
     pass
-
-
+                
 class ExportForm(forms.Form):
     EXPORT_FORMAT_CHOICES = (
         ("plain_text", "Plain Text"),
