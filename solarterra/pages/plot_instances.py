@@ -154,6 +154,16 @@ class Plot():
 
         self.component_indexes = [0, 1, 2] if variable.dims == 1 and variable.dim_sizes == 3 else [None]
 
+        if variable.dims == 1 and variable.dim_sizes is not None:
+            dim_sizes = variable.dim_sizes
+            if isinstance(dim_sizes, list):
+                total = int(np.prod(dim_sizes))
+            else:
+                total = int(dim_sizes)
+            self.component_indexes = list(range(total))
+        else:
+            self.component_indexes = [None]
+
         self.y_fields = [self.y_db_field] * len(self.component_indexes)
 
         self.y_arrays = []

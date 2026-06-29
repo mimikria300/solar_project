@@ -8,7 +8,6 @@ from solarterra.utils import NOW
 import os
 import numpy as np
 from django.core import management
-from django.db.models import Min, Max
 from solarterra.utils import bigint_ts_resolver as it
 from solarterra.utils import ts_bigint_resolver as tbr
 
@@ -387,7 +386,7 @@ class Variable(models.Model):
     datatype = models.CharField(max_length=200, blank=True, null=True)
 
     dims = models.PositiveSmallIntegerField(blank=True, null=True)
-    dim_sizes = models.PositiveSmallIntegerField(blank=True, null=True)
+    dim_sizes = models.JSONField(blank=True, null=True)
     
     is_displayed = models.BooleanField(blank=True, null=True, default=False)
 
