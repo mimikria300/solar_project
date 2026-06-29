@@ -72,3 +72,21 @@ def plain_text_generator(variables, ts_start, ts_end, aggregate=False, validate=
     yield from ptm.stream_label_rows()
     yield from ptm.stream_formatted_rows(rows)
     yield from ptm.stream_footer()
+
+
+def plain_text_stream(ptm, rows):
+    '''
+    Streaming formatter for pre-loaded, pre-processed data.
+    Use when the data pipeline runs in the caller (e.g. to resolve actual filename before streaming starts).
+
+    ptm: PlainTextMeta instance with info already fully set.
+    rows: numpy record array (data_by_record or agg_data_by_record), or None if no data in range.
+    '''
+    yield from ptm.stream_header()
+    if rows is None:
+        yield f"# No data for the specified time range {ptm.info['ts_start']} to {ptm.info['ts_end']}\n"
+        yield from ptm.stream_footer()
+        return
+    yield from ptm.stream_label_rows()
+    yield from ptm.stream_formatted_rows(rows)
+    yield from ptm.stream_footer()

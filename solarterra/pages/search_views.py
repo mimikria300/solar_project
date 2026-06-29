@@ -10,8 +10,9 @@ import datetime as dt
 import tempfile, os, shutil
 
 from pages.plotting import get_plots
-from pages.export import plain_text_generator
+from pages.export import plain_text_generator, plain_text_stream
 from pages.export_instances import DataHandler, PlainTextMeta, Bin
+from solarterra.utils import bigint_ts_resolver as it
 
 '''
 NB: for convinience ts_start is always in timestamp format. 
@@ -98,15 +99,57 @@ def export(request):
 
         item = example_var_per_file[0]
         dataset = item.dataset
-        filename = f"{dt_str}_{item.dataset.tag}_{item.depend_0}_{mode_tag}.txt"
         var_group = sources.filter(dataset=item.dataset, depend_0=item.depend_0).order_by('name')
-    
 
         print(f"[EXPORT] Single file streaming. Dataset: {item.dataset.tag}, depend_0: {item.depend_0}")
 
-        print(f"[EXPORT] Streaming plain text file for dataset={dataset.tag}, depend_0={var_group[0].depend_0}, variables={len(var_group)}")
+        # build ptm and run data pipeline so we can get actual bin range for the filename
+        ptm = PlainTextMeta(var_group)
+        ptm.set_everything()
+        ptm.info['aggregate'] = aggregate
+        ptm.info['validate'] = validate
+        ptm.info['ts_start'] = ts_start
+        ptm.info['ts_end'] = ts_end
+
+        data = DataHandler(
+            dataset=dataset,
+            filter_field=ptm.depend_field,
+            ts_start=ts_start,
+            ts_stop=ts_end,
+            fields=ptm.dyn_fields[1:]
+        )
+        data.query()
+
+        if not data.queryset.exists():
+            rows = None
+            file_dt_str = dt_str  # fallback to requested interval
+        else:
+            data.set_data()
+            if validate:
+                data.add_validation_to_mask()
+            if aggregate:
+                data.set_bin_arrays()
+                data.set_bin_map()
+                ptm.info['bin_size'] = data.bin_instance.bin_seconds
+                data.set_aggregated_data()
+                if data.agg_data_by_record.shape[0] == 0:
+                    rows = None
+                    file_dt_str = dt_str
+                else:
+                    actual_start = it(int(data.agg_data_by_var[0][0]))
+                    actual_end = it(int(data.agg_data_by_var[0][-1]))
+                    file_dt_str = actual_start.strftime('%Y%m%d%H%M') + '_' + actual_end.strftime('%Y%m%d%H%M')
+                    rows = data.agg_data_by_record
+            else:
+                data.clean_data()
+                file_dt_str = dt_str
+                rows = data.data_by_record
+
+        filename = f"{file_dt_str}_{item.dataset.tag}_{item.depend_0}_{mode_tag}.txt"
+        print(f"[EXPORT] Streaming plain text file for dataset={dataset.tag}, depend_0={item.depend_0}, variables={len(var_group)}")
+
         response = StreamingHttpResponse(
-            plain_text_generator(var_group, ts_start, ts_end, aggregate=aggregate, validate=validate),
+            plain_text_stream(ptm, rows),
             content_type="text/plain",
         )
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
@@ -127,11 +170,53 @@ def export(request):
             for item in example_var_per_file:
                 print(f"[EXPORT] Processing variable group: {item.dataset.tag} {item.depend_0}")
                 var_group = sources.filter(dataset=item.dataset, depend_0=item.depend_0).order_by('name')
-                filename = f"{dt_str}_{item.dataset.tag}_{item.depend_0}_{mode_tag}.txt"
+
+                ptm = PlainTextMeta(var_group)
+                ptm.set_everything()
+                ptm.info['aggregate'] = aggregate
+                ptm.info['validate'] = validate
+                ptm.info['ts_start'] = ts_start
+                ptm.info['ts_end'] = ts_end
+
+                data = DataHandler(
+                    dataset=item.dataset,
+                    filter_field=ptm.depend_field,
+                    ts_start=ts_start,
+                    ts_stop=ts_end,
+                    fields=ptm.dyn_fields[1:]
+                )
+                data.query()
+
+                if not data.queryset.exists():
+                    rows = None
+                    file_dt_str = dt_str
+                else:
+                    data.set_data()
+                    if validate:
+                        data.add_validation_to_mask()
+                    if aggregate:
+                        data.set_bin_arrays()
+                        data.set_bin_map()
+                        ptm.info['bin_size'] = data.bin_instance.bin_seconds
+                        data.set_aggregated_data()
+                        if data.agg_data_by_record.shape[0] == 0:
+                            rows = None
+                            file_dt_str = dt_str
+                        else:
+                            actual_start = it(int(data.agg_data_by_var[0][0]))
+                            actual_end = it(int(data.agg_data_by_var[0][-1]))
+                            file_dt_str = actual_start.strftime('%Y%m%d%H%M') + '_' + actual_end.strftime('%Y%m%d%H%M')
+                            rows = data.agg_data_by_record
+                    else:
+                        data.clean_data()
+                        file_dt_str = dt_str
+                        rows = data.data_by_record
+
+                filename = f"{file_dt_str}_{item.dataset.tag}_{item.depend_0}_{mode_tag}.txt"
                 filepath = os.path.join(export_dir, filename)
 
                 with open(filepath, 'w', encoding='utf-8') as file_handle:
-                    for line in plain_text_generator(var_group, ts_start, ts_end, aggregate=aggregate, validate=validate):
+                    for line in plain_text_stream(ptm, rows):
                         file_handle.write(line)
 
                 print(f"[EXPORT] Wrote file: {filepath}")

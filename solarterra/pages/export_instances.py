@@ -478,6 +478,8 @@ class PlainTextMeta():
         #TODO: once we'll got the resolution match-field, we can add max points per bin to the metainfo.
         if self.info['aggregate']:
             yield f"# Data is aggregated by averaging. Bin size (time delta): {self.info['bin_size']}s. Note that empty bins may be produced by gaps in data.\n"
+            yield f"# Requested data interval: {self.info['ts_start']} to {self.info['ts_end']}.\n"
+            yield "# Time entries represent the aggregation bins' middle points.\n"
             #TODO: add survived bins counter
             #Number of non-empty bins: {self.info['survived_bins']}/1000.
         else:
