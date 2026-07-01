@@ -58,7 +58,8 @@ class Command(UploadRequired, BaseCommand):
             if variable.is_nrv():
                 continue
 
-            if variable.dims == 0:
+            # (DIMS = 0, DIM_SIZES = null) = (DIMS = 1, DIM_SIZES = 1)
+            if variable.dims == 0 or (variable.dims == 1 and variable.dim_sizes == 1):
                 dmi.df_list.append(DynamicField(
                     field_name=var_name,
                     is_array_field=False,

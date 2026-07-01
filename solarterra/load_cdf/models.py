@@ -257,6 +257,10 @@ class Dataset(models.Model):
         cdf_obj = pycdf.CDF(cdf_path)
         try:
             arr = cdf_obj[epoch_var_name][...]
+
+            if arr.ndim > 1 and arr.shape[-1] == 1:
+                arr = arr.reshape(-1)
+                
             if len(arr) == 0:
                 return None
 
