@@ -39,8 +39,30 @@
         {% endif %}
 
         <div class="shift-buttons">
-            <button type="submit" name="shift" value="prev" class="base-btn">Предыдущий интервал</button>
-            <button type="submit" name="shift" value="next" class="base-btn">Следующий интервал</button>
+            <button type="submit" name="shift" value="prev" class="shift-btn">
+                <svg class="shift-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                    <path
+                        d="M10.75 4.75L5.5 10l5.25 5.25M6 10h8.5"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    />
+                </svg>
+                <span>Предыдущий интервал</span>
+            </button>
+            <button type="submit" name="shift" value="next" class="shift-btn">
+                <span>Следующий интервал</span>
+                <svg class="shift-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                    <path
+                        d="M9.25 4.75L14.5 10l-5.25 5.25M14 10H5.5"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    />
+                </svg>
+            </button>
         </div>
     </form>
     
@@ -72,6 +94,49 @@
 
         {% endfor %}
     </div>
+
+    <form method="post" action="{% url 'plot_clicked' %}" class="plot-navigation-form">
+        {% csrf_token %}
+
+        {% for variable_id in selected_variable_ids %}
+            <input type="hidden" name="variables" value="{{ variable_id }}">
+        {% endfor %}
+
+        <input type="hidden" name="ts_start" value="{{ t_start|date:'Y-m-d H:i:s' }}">
+        <input type="hidden" name="ts_end" value="{{ t_stop|date:'Y-m-d H:i:s' }}">
+
+        {% if validate %}
+            <input type="hidden" name="validate" value="on">
+        {% endif %}
+
+        <div class="shift-buttons">
+            <button type="submit" name="shift" value="prev" class="shift-btn">
+                <svg class="shift-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                    <path
+                        d="M10.75 4.75L5.5 10l5.25 5.25M6 10h8.5"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    />
+                </svg>
+                <span>Предыдущий интервал</span>
+            </button>
+            <button type="submit" name="shift" value="next" class="shift-btn">
+                <span>Следующий интервал</span>
+                <svg class="shift-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                    <path
+                        d="M9.25 4.75L14.5 10l-5.25 5.25M14 10H5.5"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    />
+                </svg>
+            </button>
+        </div>
+    </form>
+
 </div>
 
 {% endblock %}

@@ -20,14 +20,25 @@
 <form method="post">
     {% csrf_token %}
 
-    {% for checkbox in form.missions %}
-        <div class="mission">
-            <label for="{{ checkbox.id_for_label }}">
-                {{ checkbox.tag }}
-                {{ checkbox.choice_label }}
-            </label>
-        </div>
-    {% endfor %}
+    <div class="all-mission-buttons">
+        <button type="button" class="base-btn"onclick="event.stopPropagation(); setCheckboxesInMissionContainer('missions-container', true)">
+            Выбрать все
+        </button>
+        <button type="button" class="base-btn" onclick="event.stopPropagation(); setCheckboxesInMissionContainer('missions-container', false)">
+            Очистить
+        </button>
+    </div>
+
+    <div id="missions-container">
+        {% for checkbox in form.missions %}
+            <div class="mission">
+                <label for="{{ checkbox.id_for_label }}">
+                    {{ checkbox.tag }}
+                    {{ checkbox.choice_label }}
+                </label>
+            </div>
+        {% endfor %}
+    </div>
 
     <div>{{ form.missions.errors }}</div>
     <div>{{ form.non_field_errors }}</div>
@@ -36,5 +47,11 @@
         <button class="btn" type="submit">Далее</button>
     </div>
 </form>
+
+{% endblock %}
+
+{% block page_js %}
+
+<script src="{% static 'search.js' %}"></script>
 
 {% endblock %}

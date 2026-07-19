@@ -1,5 +1,3 @@
-
-
 function changeVisibility(element) {
 	if (typeof element === "string") {
 		element = document.getElementById(element);
@@ -31,7 +29,6 @@ function countVars(className, targetId) {
 
 }
 
-
 function checkOnetoOne(variableId) {
 	let el = document.getElementById(`poser-${variableId}`);
 	let targetEl = document.getElementById(`actual-${variableId}`);
@@ -40,9 +37,6 @@ function checkOnetoOne(variableId) {
 	targetEl.checked = el.checked;
 	console.log(targetEl.checked);
 }
-
-
-
 
 function getVariables() {
 
@@ -83,36 +77,6 @@ function getPlot() {
     
 }
 
-// function selectAllInDataset(datasetBlockId) {
-//     let datasetBlock = document.getElementById(datasetBlockId);
-    
-//     let checkboxes = datasetBlock.querySelectorAll('.variable-choice');
-    
-//     checkboxes.forEach(function(checkbox) {
-//         checkbox.checked = true;
-
-//         let variableId = checkbox.id.replace('poser-', '');
-//         checkOnetoOne(variableId);
-//     });
-    
-//     countVars('variable-choice', 'var-count');
-// }
-
-// function deselectAllInDataset(datasetBlockId) {
-//     let datasetBlock = document.getElementById(datasetBlockId);
-    
-//     let checkboxes = datasetBlock.querySelectorAll('.variable-choice');
-    
-//     checkboxes.forEach(function(checkbox) {
-//         checkbox.checked = false;
-
-//         let variableId = checkbox.id.replace('poser-', '');
-//         checkOnetoOne(variableId);
-//     });
-    
-//     countVars('variable-choice', 'var-count');
-// }
-
 function setCheckboxesInContainer(containerId, checked) {
     let container = document.getElementById(containerId);
 
@@ -147,4 +111,19 @@ function selectAllInContainer(containerId) {
 
 function deselectAllInContainer(containerId) {
     setCheckboxesInContainer(containerId, false);
+}
+
+function setCheckboxesInMissionContainer(containerId, checked) {
+    const container = document.getElementById(containerId);
+
+    if (!container) {
+        console.log(`Container not found: ${containerId}`);
+        return;
+    }
+
+    const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+
+    checkboxes.forEach(function(checkbox) {
+        checkbox.checked = checked;
+    });
 }

@@ -27,36 +27,66 @@
 
 .base-btn {
     padding: 0.3rem 0.8rem;
-    margin-right: 0.5rem;
     border: 1px solid #ccc;
     background-color: #f5f5f5;
     cursor: pointer;
     font-size: 0.9rem;
     transition: background-color 0.2s, border-color 0.2s;
+    white-space: nowrap;
 }
 
-.base-btn:hover {
+.shift-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.3rem 0.8rem;
+    border: 1px solid #ccc;
+    background-color: #f5f5f5;
+    cursor: pointer;
+    font-size: 0.9rem;
+    line-height: 1.2;
+    white-space: nowrap;
+    transition: background-color 0.2s, border-color 0.2s;
+}
+
+.base-btn:hover,
+.shift-btn:hover {
     background-color: #e0e0e0;
     border-color: #999;
 	color: inherit;
 }
 
-.base-btn:active {
+.base-btn:active,
+.shift-btn:active {
     background-color: #d0d0d0;
 }
 
-.all-var-buttons, .change-mission-btn {
+.all-var-buttons,
+.all-mission-buttons, 
+.change-mission-btn {
+    display: flex;
+    gap: 0.7rem;
     margin-bottom: 0.5rem;
     margin-top: 0.5rem;
 }
 
 .all-dataset-var-buttons {
+    display: flex;
+    gap: 0.7rem;
     margin-left: 4rem;
     margin-bottom: 0.5rem;
     margin-top: 0.5rem;
 }
 
+.shift-icon {
+    width: 1rem;
+    height: 1rem;
+    flex: 0 0 1rem;
+}
+
 .shift-buttons {
+    display: flex;
+    gap: 0.7rem;
 	margin-left: 1rem;
     margin-bottom: 0.5rem;
     margin-top: 0.5rem;
