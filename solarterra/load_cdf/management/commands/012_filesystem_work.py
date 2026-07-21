@@ -7,6 +7,10 @@ import zipfile
 import shutil
 from .evaluate_extras import command_logger, UploadRequired
 
+
+SIZE_SHRINK_RATIO = 0.7
+
+
 class Command(UploadRequired, BaseCommand):
 
     help = "#2 step in evaluation stage of the dataset upload.\n\
@@ -62,14 +66,34 @@ class Command(UploadRequired, BaseCommand):
                 new_files = [f for f in extracted_files if f not in existing_files]
 
                 if replaced_files:
-                        collision_logs_txt = os.path.join(settings.COLLISIONS_LOG_DIR, f"{upload.dataset.tag}_{upload.u_tag}_collisions.txt")
-                        with open(collision_logs_txt, 'w+') as f:
-                            f.write("\n".join(replaced_files))
+                    collision_logs_txt = os.path.join(settings.COLLISIONS_LOG_DIR, f"{upload.dataset.tag}_{upload.u_tag}_collisions.txt")
+                    
+                    with open(collision_logs_txt, 'w+') as f:
+                        f.write("\n".join(replaced_files))
+
+                    make_log_entry(
+                        f"{len(replaced_files)} collisions found for dataset {upload.dataset.tag}. "
+                        f"These files will be replaced with newer versions. "
+                        f"Collisions saved in {collision_logs_txt}",
+                        "INFO",
+                        upload=upload
+                    )
+
+                    for cdf_filename in replaced_files:
+                        old_path = os.path.join(dataset_dir_path, cdf_filename)
+                        new_path = os.path.join(temp_dir, cdf_filename)
+
+                        old_size = os.path.getsize(old_path)
+                        new_size = os.path.getsize(new_path)
+
+                        if old_size > 0 and new_size < old_size * SIZE_SHRINK_RATIO:
+                            shrink_percent = round((1 - new_size / old_size) * 100, 2)
+
                             make_log_entry(
-                                f"{len(replaced_files)} collisions found for dataset {upload.dataset.tag}. "
-                                f"These files will be replaced with newer versions. "
-                                f"Collisions saved in {collision_logs_txt}",
-                                "INFO",
+                                f"Replacement file '{cdf_filename}' is significantly smaller than existing one: "
+                                f"old_size={old_size} bytes, new_size={new_size} bytes, "
+                                f"decrease={shrink_percent}%",
+                                "WARNING",
                                 upload=upload
                             )
                 else:

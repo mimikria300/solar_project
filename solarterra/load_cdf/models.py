@@ -8,8 +8,8 @@ from solarterra.utils import NOW
 import os
 import numpy as np
 from django.core import management
-from django.db.models import Min, Max
 from solarterra.utils import bigint_ts_resolver as it
+from solarterra.utils import ts_bigint_resolver as tbr
 
 
 #------ float32 tryout------------#
@@ -183,6 +183,9 @@ class Dataset(models.Model):
     created = models.DateTimeField(auto_now_add=True)
     modified = models.DateTimeField(auto_now=True)
 
+    time_start = models.BigIntegerField(blank=True, null=True)
+    time_end = models.BigIntegerField(blank=True, null=True)
+
     objects = DatasetManager()
 
     def __str__(self):
@@ -229,62 +232,108 @@ class Dataset(models.Model):
     def ignore_variables(self):
         return self.variables.filter(var_logic_type="ignore_data").order_by('name')
     
+    def _get_epoch_variable(self):
+        return self.variables.filter(name__icontains='epoch').order_by('name').first()
+
+    def _parse_valid_time(self, raw_value):
+        if raw_value is None:
+            return None
+
+        try:
+            value_str = raw_value[0] if isinstance(raw_value, list) else raw_value
+            if not value_str:
+                return None
+
+            return datetime.datetime.strptime(
+                value_str,
+                "%d-%b-%Y %H:%M:%S.%f"
+            ).replace(tzinfo=datetime.timezone.utc)
+        except Exception:
+            return None
+
+    def _read_epoch_from_file(self, cdf_path, epoch_var_name, from_start=True):
+        from spacepy import pycdf
+
+        cdf_obj = pycdf.CDF(cdf_path)
+        try:
+            arr = cdf_obj[epoch_var_name][...]
+
+            if arr.ndim > 1 and arr.shape[-1] == 1:
+                arr = arr.reshape(-1)
+                
+            if len(arr) == 0:
+                return None
+
+            value = arr[0] if from_start else arr[-1]
+            return tbr(value)
+        finally:
+            cdf_obj.close()
+
+    def rebuild_time_range(self):
+        epoch_variable = self._get_epoch_variable()
+
+        if epoch_variable is None:
+            self.time_start = None
+            self.time_end = None
+            self.save(update_fields=['time_start', 'time_end'])
+            return
+
+        files_qs = CDFFileStored.objects.filter(
+            upload__dataset=self,
+            loaded=True
+        ).order_by('full_path')
+
+        if not files_qs.exists():
+            self.time_start = None
+            self.time_end = None
+            self.save(update_fields=['time_start', 'time_end'])
+            return
+
+        start = None
+        for cdf_file in files_qs:
+            start = self._read_epoch_from_file(
+                cdf_file.full_path,
+                epoch_variable.name,
+                from_start=True
+            )
+            if start is not None:
+                break
+
+        end = None
+        for cdf_file in files_qs.order_by('-full_path'):
+            end = self._read_epoch_from_file(
+                cdf_file.full_path,
+                epoch_variable.name,
+                from_start=False
+            )
+            if end is not None:
+                break
+
+        self.time_start = start
+        self.time_end = end
+        self.save(update_fields=['time_start', 'time_end'])
+    
     def get_time_range(self):
-        if not hasattr(self, 'dynamic'):
+        if self.time_start is None or self.time_end is None:
             return (None, None)
-        
-        data_model = self.dynamic.resolve_class()
-        if data_model is None:
-            return (None, None)
-        
-        epoch_field = self.dynamic.fields.filter(
-            field_name__icontains='epoch'
-        ).order_by('field_name').first()
 
-        if epoch_field is None:
-            return (None, None)
-        
-        result = data_model.objects.aggregate(
-            min_time=Min(epoch_field.field_name),
-            max_time=Max(epoch_field.field_name)
-        )
+        min_time = it(self.time_start)
+        max_time = it(self.time_end)
 
-        min_time = result['min_time']
-        max_time = result['max_time']
-        
-        if min_time is not None:
-            min_time = it(min_time)
-        if max_time is not None:
-            max_time = it(max_time)
+        epoch_variable = self._get_epoch_variable()
+        if epoch_variable is None:
+            return (min_time, max_time)
 
-        epoch_variable = epoch_field.variable_instance
-        _dt_fmt = "%d-%b-%Y %H:%M:%S.%f"
+        validmin_dt = self._parse_valid_time(epoch_variable.validmin)
+        validmax_dt = self._parse_valid_time(epoch_variable.validmax)
 
-        if min_time is not None and epoch_variable.validmin is not None:
-            try:
-                raw = epoch_variable.validmin
-                validmin_str = raw[0] if isinstance(raw, list) else raw
-                validmin_dt = datetime.datetime.strptime(validmin_str, _dt_fmt).replace(tzinfo=datetime.timezone.utc)
+        if validmin_dt is not None and min_time < validmin_dt:
+            min_time = validmin_dt
 
-                if min_time < validmin_dt:
-                    min_time = validmin_dt
-            except Exception:
-                pass
+        if validmax_dt is not None and max_time > validmax_dt:
+            max_time = validmax_dt
 
-        if max_time is not None and epoch_variable.validmax is not None:
-            try:
-                raw = epoch_variable.validmax
-                validmax_str = raw[0] if isinstance(raw, list) else raw
-                validmax_dt = datetime.datetime.strptime(validmax_str, _dt_fmt).replace(tzinfo=datetime.timezone.utc)
-
-                if max_time > validmax_dt:
-                    max_time = validmax_dt
-            except Exception:
-                pass
-        
         return (min_time, max_time)
-
-
 
 
 # in case of multiple values create multiple instances with the same title
@@ -341,7 +390,7 @@ class Variable(models.Model):
     datatype = models.CharField(max_length=200, blank=True, null=True)
 
     dims = models.PositiveSmallIntegerField(blank=True, null=True)
-    dim_sizes = models.PositiveSmallIntegerField(blank=True, null=True)
+    dim_sizes = models.JSONField(blank=True, null=True)
     
     is_displayed = models.BooleanField(blank=True, null=True, default=False)
 
@@ -686,7 +735,7 @@ class DataType(models.Model):
 
 
     def is_epoch(self):
-        return 'EPOCH' in self.cdf_file_label
+        return self.cdf_file_label in {'CDF_EPOCH', 'CDF_EPOCH16', 'CDF_TIME_TT2000'}
 
 
 class LogEntry(models.Model):

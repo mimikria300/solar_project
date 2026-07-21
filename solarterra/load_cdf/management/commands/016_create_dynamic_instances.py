@@ -2,7 +2,7 @@ from django.core.management.base import BaseCommand
 import os
 from django.conf import settings
 from load_cdf.models import *
-from load_cdf.utils import safe_str
+from load_cdf.utils import safe_str, to_python_identifier
 from .evaluate_extras import command_logger, UploadRequired
 
 
@@ -26,10 +26,15 @@ class Command(UploadRequired, BaseCommand):
             make_log_entry("Dynamic model instance for the dataset is already found, skipping dynamic instances creation.", "FOUND", upload=upload)
             return
 
-        model_file_name = dataset.tag + ".py"
+        python_dataset_tag = to_python_identifier(dataset.tag)
+
+        if python_dataset_tag != dataset.tag:
+            make_log_entry(f"Dataset tag '{dataset.tag}' normalized to python-safe name '{python_dataset_tag}'", "INFO", upload=upload)
+
+        model_file_name = f"{python_dataset_tag}.py"
 
         dynamic_model_instance = dmi = DynamicModel(
-            model_name=f"{dataset.tag}{settings.MODEL_POSTFIX}",
+            model_name=f"{python_dataset_tag}{settings.MODEL_POSTFIX}",
             dataset_instance=dataset,
             model_file_path=os.path.join(settings.MODEL_DIR_PATH, model_file_name)
         )
@@ -53,7 +58,8 @@ class Command(UploadRequired, BaseCommand):
             if variable.is_nrv():
                 continue
 
-            if variable.dims == 0:
+            # (DIMS = 0, DIM_SIZES = null) = (DIMS = 1, DIM_SIZES = 1)
+            if variable.dims == 0 or (variable.dims == 1 and variable.dim_sizes == 1):
                 dmi.df_list.append(DynamicField(
                     field_name=var_name,
                     is_array_field=False,

@@ -9,7 +9,6 @@
 {% block page_css %}
     <link rel="stylesheet" href="{% static 'form.css' %}">
     <link rel="stylesheet" href="{% static 'search.css' %}">
-    
 {% endblock %}
 
 {% block page %}
@@ -23,14 +22,14 @@
 
 <div>
     <div><b>Выбранные миссии:</b> {{ selected_missions|join:", " }}</div>
-    <div class="change-buttons"><a href="{% url 'select_missions' %}" class="dataset-btn">Изменить миссии</a></div>
+    <div class="change-mission-btn"><a href="{% url 'select_missions' %}" class="base-btn">Изменить миссии</a></div>
 </div>
 
-<div class="container-buttons">
-	<button type="button" class="dataset-btn" onclick="event.stopPropagation(); selectAllInContainer('datasets-container');">
+<div class="all-var-buttons">
+	<button type="button" class="base-btn" onclick="event.stopPropagation(); selectAllInContainer('datasets-container');">
 		Выбрать все
 	</button>
-	<button type="button" class="dataset-btn" onclick="event.stopPropagation(); deselectAllInContainer('datasets-container');">
+	<button type="button" class="base-btn" onclick="event.stopPropagation(); deselectAllInContainer('datasets-container');">
 		Очистить
 	</button>
 </div>
@@ -44,9 +43,9 @@
 		<div class="dataset" onclick="changeVisibility('dataset-list-{{ dataset.id }}');">{{ dataset.logical_description }} [{{ dataset.tag }}]</div>
 		<div id="dataset-list-{{ dataset.id }}" hidden>
 
-			<div class="dataset-buttons">
-				<button type="button" class="dataset-btn" onclick="event.stopPropagation(); selectAllInDataset('dataset-list-{{ dataset.id }}');">Выбрать все</button>
-				<button type="button" class="dataset-btn" onclick="event.stopPropagation(); deselectAllInDataset('dataset-list-{{ dataset.id }}');">Очистить</button>
+			<div class="all-dataset-var-buttons">
+				<button type="button" class="base-btn" onclick="event.stopPropagation(); selectAllInDataset('dataset-list-{{ dataset.id }}');">Выбрать все</button>
+				<button type="button" class="base-btn" onclick="event.stopPropagation(); deselectAllInDataset('dataset-list-{{ dataset.id }}');">Очистить</button>
 			</div>
 
 			{% for var in  dataset.plottable_variables %}

@@ -1,4 +1,3 @@
-
 @font-face {
     font-family: "Inter";
     src: url("./font/Inter.ttf"), format("ttf");
@@ -16,7 +15,6 @@
     --dark-color: rgb(0, 21, 41);
 }
 
-
 html {
     height: 100%;
 }
@@ -32,11 +30,8 @@ html {
 }
 
 a {
-
-
     text-decoration: none;
-    color: var(--dark-color);
-    
+    color: var(--dark-color); 
 }
 
 a:hover {
@@ -47,7 +42,6 @@ a:hover {
 .flex-body {
     height: 100%;
     min-height: 100%;
-
     display: flex;
     flex-direction: column;
     max-width: 1600px;
@@ -56,8 +50,7 @@ a:hover {
 
 .page-container {
     flex: 1;
-    padding: 0 1rem;
-    
+    padding: 0 1rem;   
 }
 
 .page-footer {
@@ -87,7 +80,6 @@ a:hover {
     font-weight: 500;
 }
 
-
 .page-title {
     font-size: 1.3rem;
     font-weight: 600;
@@ -97,7 +89,6 @@ a:hover {
 .page-block {
     padding: 1.5rem;
 }
-
 
 .btn {
     margin: 1rem 0;
@@ -109,12 +100,10 @@ a:hover {
     font-size: 1.1rem;
 }
 
-
 .btn:hover {
     transition: all 0.5s;
     cursor: pointer;
     background-color: var(--border-color);
-    
 }
 
 .psd-btn {
@@ -135,8 +124,7 @@ a:hover {
 a .psd-btn:hover {
     color: black;
     font-weight: 500;
-    display: block;
-    
+    display: block;   
 }
 
 .smaller_page {
@@ -145,13 +133,11 @@ a .psd-btn:hover {
 }
 
 .central {
-    max-width: 500px;
-    
+    max-width: 500px; 
 }
 
 .text-div {
     font-size: 1.1rem;
-
     margin: 3rem 0;
     line-height: 1.5rem;
 }
@@ -162,7 +148,6 @@ a .psd-btn:hover {
 
 .tech-table th {
     text-align: left;
-    
 }
 
 .tech-table,
@@ -170,7 +155,6 @@ a .psd-btn:hover {
 .tech-table td {
     border: 2px solid black;
 }
-
 
 .errorlist {
 	color: red;

@@ -21,15 +21,13 @@ def save_single_file(cdf_file, fields, model_class, upload):
     # numpy array work only
     for field in fields:
         var = field.variable_instance
-        
-        if field.is_array_field:
-            # for ArrayField take the 2D matrix without cutting along the axes
-            arr = cdf_obj[var.name][...]
-            # for NRV
-            if arr.ndim == 1:
-                arr = arr.reshape(1, -1)
-        else:
-            arr = cdf_obj[var.name][...]
+
+        arr = cdf_obj[var.name][...]
+
+        if not field.is_array_field and arr.ndim > 1 and arr.shape[-1] == 1:
+            arr = arr.reshape(-1)
+        elif field.is_array_field and arr.ndim == 1:
+            arr = arr.reshape(1, -1)
         
         if len(arr) == 0:
             make_log_entry(f"file '{cdf_file.full_path}' field '{field.field_name}' variable '{var.name}' contains no data", "WARNING", upload=upload)
@@ -63,7 +61,7 @@ def save_single_file(cdf_file, fields, model_class, upload):
             #print(f"FILL {fill_value}: {len(arr[arr==fill_value])} / {arr.shape}")
             #print("added fillval condition", var.fillval, type(arr[0]), fill_value, type(fill_value))
             if fill_value is None:
-                make_log_entry("Could not parse fillval: file '{cdf_file.full_path}' variable '{var.name}' datatype '{data_type.cdf_file_label}', numpy type '{arr.dtype}'", "ERROR")
+                make_log_entry(f"Could not parse fillval: file '{cdf_file.full_path}' variable '{var.name}' datatype '{var.datatype}', numpy type '{arr.dtype}'", "ERROR")
                 exit(1)
             # choose values that are fillvals
             condition = condition | (arr == fill_value)
@@ -208,3 +206,12 @@ class Command(UploadRequired, BaseCommand):
                 make_log_entry(f"{current_percent}% done, {index + 1} files uploaded, total time {round(sum(deltas), 5)}, avg time per file {round(sum(deltas) / len(deltas), 5)}", upload=upload)
                 print(f"{current_percent}% done, {index + 1} files uploaded, total time {round(sum(deltas), 5)}, avg time per file {round(sum(deltas) / len(deltas), 5)}")
                 percent = current_percent
+        
+        upload.dataset.rebuild_time_range()
+
+        make_log_entry(
+            f"Updated dataset time range: "
+            f"{upload.dataset.time_start} .. {upload.dataset.time_end}",
+            "INFO",
+            upload=upload
+        )

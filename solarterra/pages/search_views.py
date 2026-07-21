@@ -9,6 +9,7 @@ import datetime as dt
 from pages.plotting import get_plots
 #from pages.export import *
 
+
 def select_missions(request):
     if request.method == "POST":
         form = MissionSelectForm(request.POST)
@@ -60,6 +61,17 @@ def select_variables(request):
 
     return render(request, "pages/variable_select.html", context)
 
+def shift_interval(t_start, t_stop, direction):
+    interval = t_stop - t_start
+
+    if direction == "prev":
+        return t_start - interval, t_stop - interval
+
+    if direction == "next":
+        return t_start + interval, t_stop + interval
+
+    return t_start, t_stop
+
 def plot_clicked(request):
     '''
     Is called while the user is on the variable selection page and clicks "Plot". Expects POST with form data.
@@ -68,9 +80,15 @@ def plot_clicked(request):
 
     if request.method != "POST":
         return HttpResponse('Plot endpoint expects POST', status=405)
+    
+    selected_missions = request.session.get("selected_missions")
+    datasets = (
+        Dataset.objects.have_data()
+        .filter(mission__in=selected_missions)
+        .order_by("mission", "tag")
+    )
 
     #reinstate forms with POST data
-    selected_missions = request.session.get("selected_missions")
     var_form = VariableSelectForm(request.POST, missions=selected_missions)
     plot_form = PlotForm(request.POST) 
     export_form = ExportForm(request.POST)
@@ -87,13 +105,26 @@ def plot_clicked(request):
         #place to get plot parameters from plot_form if needed
         #some_plot_param = plot_form.cleaned_data['some_plot_param']
 
+        shift_direction = request.POST.get("shift")
+        if shift_direction in {"prev", "next"}:
+            t_start, t_stop = shift_interval(t_start, t_stop, shift_direction)
+
         #get plots
         plots = get_plots(var_instances, t_start, t_stop, validate)
+
+        for plot in plots:
+            print(
+                f"[invalid_values] dataset={plot.variable.dataset.tag}, "
+                f"variable={plot.variable.name}, "
+                f"invalid_values={plot.invalid_values}"
+            )
 
         context = {
             't_start' : t_start,
             't_stop' : t_stop,
-            'plots' : plots,          
+            'validate': validate,
+            'plots' : plots,
+            'selected_variable_ids': list(var_instances.values_list("id", flat=True)),          
         }
         return render(request, "pages/plot_page.html", context=context)
 

@@ -113,7 +113,7 @@
 
     const prefix = '{{ widget.attrs.id }}';
     const inputField = document.getElementById('{{ widget.attrs.id }}');
-    const visibleContainer = document.getElementById('{{ widget.attrs.id }}-datetime-container').querySelector('.dtw-visible-container');
+    const form = inputField.closest('form');
 
     // function for validation input sting
     function isValidFormat(val) {
@@ -187,25 +187,61 @@
       confButtonChange(prefix, true);
     }
 
+    function getVisibleContainer(inp) {
+      return inp.closest('.dtw-datetime-container').querySelector('.dtw-visible-container');
+    }
+
+    function validateDate(form) {
+      if (!form) return false;
+
+      const allInputs = form.querySelectorAll('.dtw-input-field');
+
+      allInputs.forEach(function (inp) {
+        const container = getVisibleContainer(inp);
+        const val = inp.value.trim();
+
+        container.classList.remove('dtw-error');
+
+        if (val.length > 0 && !isValidFormat(val)) {
+          container.classList.add('dtw-error');
+        }
+      });
+
+      if (allInputs.length < 2) return false;
+
+      const startInput = allInputs[0];
+      const endInput = allInputs[1];
+
+      const startVal = startInput.value.trim();
+      const endVal = endInput.value.trim();
+
+      if (!startVal || !endVal) return false;
+      if (!isValidFormat(startVal) || !isValidFormat(endVal)) return false;
+
+      const startDate = new Date(startVal.replace(' ', 'T'));
+      const endDate = new Date(endVal.replace(' ', 'T'));
+
+      if (startDate >= endDate) {
+        getVisibleContainer(startInput).classList.add('dtw-error');
+        getVisibleContainer(endInput).classList.add('dtw-error');
+        return true;
+      }
+
+      return false;
+    }
+
     // validate input
     inputField.addEventListener('input', function () {
       const val = inputField.value.trim();
 
-      if (val.length === 0) {
-        visibleContainer.classList.remove('dtw-error');
-        return;
+      if (val.length > 0 && isValidFormat(val)) {
+        syncToCalendar(val);
       }
 
-      if (isValidFormat(val)) {
-        visibleContainer.classList.remove('dtw-error');
-        syncToCalendar(val);
-      } else {
-        visibleContainer.classList.add('dtw-error');
-      }
+      validateDate(form);
     });
 
     // blocking form submission
-    const form = inputField.closest('form');
     if (form && !form._submitHandlerAdded) {
       form._submitHandlerAdded = true;
 
@@ -230,16 +266,9 @@
           return;
         }
         
-        const startVal = allInputs[0].value.trim();
-        const endVal   = allInputs[1].value.trim();
-        const startDate = new Date(startVal.replace(' ', 'T'));
-        const endDate   = new Date(endVal.replace(' ', 'T'));
-
-        if (startDate >= endDate) {
-            allInputs[0].closest('.dtw-datetime-container').querySelector('.dtw-visible-container').classList.add('dtw-error');
-            allInputs[1].closest('.dtw-datetime-container').querySelector('.dtw-visible-container').classList.add('dtw-error');
-            event.preventDefault();
-            alert('Начальная дата должна быть меньше конечной.');
+        if (validateDate(form)) {
+          event.preventDefault();
+          alert('Начальная дата должна быть меньше конечной.');
         }
 
       });

@@ -25,6 +25,7 @@ TYPE_CONVERSION = {
     'CDF_CHAR': 'models.TextField',
     'CDF_UCHAR': 'models.TextField',
     'CDF_EPOCH': 'models.BigIntegerField',
+    'CDF_TIME_TT2000': 'models.BigIntegerField',
 }
 
 TYPE_NUMPY = {
@@ -45,6 +46,7 @@ TYPE_NUMPY = {
     #'CDF_CHAR': 'models.TextField',
     #'CDF_UCHAR': 'models.TextField',
     'CDF_EPOCH': 'object',
+    'CDF_TIME_TT2000': 'object',
 }
 
 # taken from the cdf manual https://spdf.gsfc.nasa.gov/istp_guide/vattributes.html#FILLVAL

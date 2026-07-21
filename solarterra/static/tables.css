@@ -10,8 +10,6 @@
     cursor: pointer;
 }
 
-
-
 table, tr, td {
     border: 3px solid var(--border-color);
     border-collapse: collapse;
@@ -35,8 +33,6 @@ td, th, tr {
     padding: 0.5rem 1rem;
 }
 
-
-
 .clickable,
 .clickable th {
     font-weight: normal;
@@ -47,4 +43,3 @@ td, th, tr {
 .clickable:hover th {
     cursor: pointer;
 }
-
