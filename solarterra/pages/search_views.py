@@ -211,13 +211,14 @@ def export_clicked(request):
             f"ts_start={ts_start}, ts_end={ts_end}, aggregate: {aggregate}, validate: {validate}"
         )
 
-        # #ANCHOR a testing intervention for raw_cdf
-        # if export_format == "raw_cdf":
-        #     from export.export import raw_cdf_export
-        #     raw_cdf_export(selected_missions, variables, ts_start, ts_end)
-        #     return HttpResponse("Raw CDF export completed. Check the console for details.", status=200)
+        # Handle raw_cdf export
+        if export_format == "raw_cdf":
+            from export.export import raw_cdf_export
+            # responce = raw_cdf_export(variables, ts_start, ts_end)
+            return raw_cdf_export(selected_missions, variables, ts_start, ts_end)
 
-        if export_format != "plain_text": return HttpResponse("Only plain_text is implemented for now", status=501)
+        if export_format != "plain_text": 
+            return HttpResponse("Only plain text and raw CDF exports are implemented for now", status=501)
 
         #quiery containing a single var from a distinct group filtered by dataset tag and depend_0
         var_groups = list(variables.order_by('dataset__tag').distinct('dataset__tag', 'depend_0'))
