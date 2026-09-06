@@ -761,6 +761,15 @@ class DataType(models.Model):
     def is_epoch(self):
         return self.cdf_file_label in {'CDF_EPOCH', 'CDF_EPOCH16', 'CDF_TIME_TT2000'}
 
+    def is_numeric(self):
+        '''Check if this data type is numeric (can handle NaN)'''
+        # Numeric CDF types that support NaN
+        numeric_types = {
+            'CDF_REAL4', 'CDF_REAL8', 'CDF_INT1', 'CDF_INT2', 'CDF_INT4', 'CDF_INT8',
+            'CDF_FLOAT', 'CDF_DOUBLE', 'CDF_EPOCH', 'CDF_EPOCH16', 'CDF_TIME_TT2000'
+        }
+        return self.cdf_file_label in numeric_types
+
 
 class LogEntry(models.Model):
 

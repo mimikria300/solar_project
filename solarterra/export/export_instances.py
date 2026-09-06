@@ -82,14 +82,23 @@ class DataHandler():
                     for i, df in enumerate(self.data_fields):
                         val = row[i + 1]
                         if df.is_array_field:
-                            flat.extend(val if val is not None else [None] * df.array_size)
+                            if val is not None:
+                                flat.extend(val)
+                            else:
+                                # Use np.nan for numeric types, None for string/object types
+                                missing_val = np.nan if df.data_type_instance and df.data_type_instance.is_numeric() else None
+                                flat.extend([missing_val] * df.array_size)
                         else:
                             flat.append(val)
                     expanded.append(flat)
                 rows = expanded
 
+            print("[EXPORT] Data sample (first row):", rows[0] if rows else "No data")
+            print("[EXPORT] Data types in first row:", [type(v).__name__ for v in rows[0]] if rows else "No data")
+            
             pile = np.stack(rows)
             print("PILE SHAPE", pile.shape)
+            print("[EXPORT] PILE DTYPE:", pile.dtype)
             # sort everything by the first row
             sorted_pile = pile[pile[:, 0].argsort()]
 
@@ -103,7 +112,15 @@ class DataHandler():
     def set_mask(self):
         '''Set a boolean mask for values that is None/NaN'''
         if self.data_by_var is not None:
-            self.mask = ~np.isnan(self.data_by_var)
+            # Handle both numeric and non-numeric dtypes
+            try:
+                self.mask = ~np.isnan(self.data_by_var)
+            except TypeError as e:
+                # For non-numeric dtypes (strings, objects), check for None explicitly
+                print(f"[EXPORT] set_mask() encountered non-numeric data. Array dtype: {self.data_by_var.dtype}, shape: {self.data_by_var.shape}")
+                print(f"[EXPORT] Field names involved: {self.all_field_names}")
+                print(f"[EXPORT] Error: {e}")
+                self.mask = self.data_by_var != None
         else:
             self.mask = None
 
