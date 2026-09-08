@@ -6,7 +6,7 @@ class ExportForm(forms.Form):
     EXPORT_FORMAT_CHOICES = (
         ("plain_text", "Plain Text"),
         ("raw_cdf", "Original CDF"),
-        ("clean_cdf", "Clean CDF"),
+        # ("clean_cdf", "Clean CDF"),  # not implemented yet, hidden from frontend
     )
 
     export_format = forms.ChoiceField(

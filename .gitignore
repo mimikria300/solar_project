@@ -1,5 +1,8 @@
 configs/settings.json
 
+solarterra/load_cdf/migrations/*.py
+!solarterra/load_cdf/migrations/__init__.py
+
 solarterra_submodules/data_cdf/migrations/*.py
 !solarterra_submodules/data_cdf/migrations/__init__.py
 

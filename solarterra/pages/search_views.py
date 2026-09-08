@@ -4,11 +4,10 @@ from data_cdf.models import *
 from django.http import HttpResponse
 from pages.forms import MissionSelectForm, VariableSelectForm, PlotForm
 from export.forms import ExportForm
-from export.export import single_file_export, multi_file_export
 import datetime as dt
 
 from pages.plotting import get_plots
-from export.export import single_file_export, multi_file_export
+from export.dispatcher import export_dispatcher
 
 '''
 NB: for convinience ts_start is always in timestamp format. 
@@ -189,53 +188,14 @@ def export_clicked(request):
     if request.method != "POST":
         return HttpResponse("Export endpoint expects POST", status=405)
 
-    #reinstate forms with POST data
+    #reinstate forms with POST data, purely to validate + re-render with errors; dispatcher re-parses cleaned data itself
     selected_missions = request.session.get("selected_missions")
     var_form = VariableSelectForm(data=request.POST, missions=selected_missions)
     plot_form = PlotForm(data=request.POST)
     export_form = ExportForm(data=request.POST)
 
     if var_form.is_valid() and export_form.is_valid():
-
-        export_format = export_form.cleaned_data["export_format"]
-        variables = var_form.cleaned_data["variables"]
-        ts_start = var_form.cleaned_data["ts_start"]
-        ts_end = var_form.cleaned_data["ts_end"]
-
-        aggregate = export_form.cleaned_data["aggregate"]
-        validate = export_form.cleaned_data["validate"]
-
-        print(
-            f"[EXPORT] Request accepted. format={export_format}, variables={variables.count()}, "
-            f"ts_start={ts_start}, ts_end={ts_end}, aggregate: {aggregate}, validate: {validate}"
-        )
-
-        # Handle raw_cdf export
-        if export_format == "raw_cdf":
-            from export.export import raw_cdf_export
-            # responce = raw_cdf_export(variables, ts_start, ts_end)
-            return raw_cdf_export(selected_missions, variables, ts_start, ts_end)
-
-        if export_format != "plain_text": 
-            return HttpResponse("Only plain text and raw CDF exports are implemented for now", status=501)
-
-        #quiery containing a single var from a distinct group filtered by dataset tag and depend_0
-        var_groups = list(variables.order_by('dataset__tag').distinct('dataset__tag', 'depend_0'))
-
-        print(f"[EXPORT] Distinct file groups: {len(var_groups)}")
-
-        dt_str = ts_start.strftime('%Y%m%d%H%M') + '_' + ts_end.strftime('%Y%m%d%H%M')
-        mode_tag = f"{'agg' if aggregate else 'full'}_{'val' if validate else 'raw'}"
-
-        if len(var_groups) == 1:
-            item = var_groups[0]
-            var_group = variables.filter(dataset=item.dataset, depend_0=item.depend_0).order_by('name')
-            response = single_file_export(item.dataset, var_group, ts_start, ts_end, aggregate, validate, dt_str, mode_tag)
-
-        else: #safe, it's not zero, data is cleaned and form is verified
-            response = multi_file_export(variables, var_groups, ts_start, ts_end, aggregate, validate, dt_str, mode_tag)
-
-        return response
+        return export_dispatcher(request)
 
     #forms aren't ok, re-render search page with errors
     else:
