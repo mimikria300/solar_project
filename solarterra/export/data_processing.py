@@ -111,14 +111,18 @@ class DataHandler():
             # Handle both numeric and non-numeric dtypes
             try:
                 self.mask = ~np.isnan(self.data_by_var)
-            except TypeError as e:
-                # For non-numeric dtypes (strings, objects), check for None explicitly
-                print(f"[EXPORT] set_mask() encountered non-numeric data. Array dtype: {self.data_by_var.dtype}, shape: {self.data_by_var.shape}")
-                print(f"[EXPORT] Field names involved: {self.all_field_names}")
-                print(f"[EXPORT] Error: {e}")
-                self.mask = self.data_by_var != None
+            except TypeError:
+                #object pile = int NULLs (None) + float NaNs mixed, so check for both
+                #(!= None alone lets NaN through as valid and it poisons agg bins)
+                print(f"[EXPORT] set_mask(): object pile {self.data_by_var.shape}, fields: {self.all_field_names}")
+                self.mask = self._is_present(self.data_by_var).astype(bool)
         else:
             self.mask = None
+
+    #elementwise over object arrays, returns object array of bools
+    _is_present = staticmethod(np.frompyfunc(
+        lambda v: v is not None and not (isinstance(v, (float, np.floating)) and np.isnan(v)), 1, 1
+    ))
 
     #---VALIDATION---
     def _get_bounds_for_field(self, dyn_field, index=None):
