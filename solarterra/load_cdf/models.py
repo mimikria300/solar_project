@@ -124,6 +124,9 @@ class CDFFileStored(models.Model):
     tu_start = Float32Field(blank=True, null=True)
     tu_end = Float32Field(blank=True, null=True)
 
+    #bytes on disk, set at registration (012); lets export size checks skip disk access
+    file_size = models.BigIntegerField(blank=True, null=True)
+
     objects = GetManager()
 
     def __str__(self):

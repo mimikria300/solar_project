@@ -37,7 +37,8 @@ class SizeCheckMiddleware(ExportMiddleware):
         return None
 
     def approximate_export_size(self, request):
-        '''Raw CDF: real file sizes. Others: records x columns x BYTES_PER_VALUE per group, aggregation caps records at bin count.'''
+        '''Raw CDF: real file sizes. Clean CDF (not aggregated): original files' bytes/second x requested span, once per dataset.
+        Others (+ datasets w/o usable files): records x columns x BYTES_PER_VALUE per group, aggregation caps records at bin count.'''
         import os
         from export.config import BYTES_PER_VALUE
         from export.data_processing import Bin
@@ -50,9 +51,21 @@ class SizeCheckMiddleware(ExportMiddleware):
             return sum(os.path.getsize(f.full_path) for f in find_cdf_files(job.variables, job.ts_start, job.ts_end)
                        if os.path.exists(f.full_path))
 
-        bytes_per_value = BYTES_PER_VALUE.get(job.export_format, 16)
         total = 0
-        for item in job.var_groups():
+        groups = job.var_groups()
+        if job.export_format == "clean_cdf" and not job.aggregate:
+            #clean CDF comes out about original size (Maria 09-28: "a day ~ an original file")
+            #per file rate (size / its span) x its overlap with the request: yearly/odd-length files work, gaps cost nothing
+            #per dataset, not per group: an original file already holds all its groups
+            #overestimates a bit on purpose: originals hold all vars
+            for dataset in {item.dataset for item in groups}:
+                estimate = self._original_bytes_in_range(dataset, tf(job.ts_start), tf(job.ts_end))
+                if estimate is not None:
+                    total += estimate
+                    groups = [item for item in groups if item.dataset != dataset]
+
+        bytes_per_value = BYTES_PER_VALUE.get(job.export_format, 16)
+        for item in groups:
             var_group = job.group_vars(item)
             depend_field = item.get_depend_field()
             if depend_field is None:
@@ -68,6 +81,32 @@ class SizeCheckMiddleware(ExportMiddleware):
                 for df in var.dynamic.all():
                     columns += df.array_size if df.is_array_field else 1
             total += records * columns * bytes_per_value
+        return int(total) #overlap scaling makes floats, bytes are whole
+
+    @staticmethod
+    def _original_bytes_in_range(dataset, tu_start, tu_end):
+        '''Sum of the dataset's original CDF sizes, each scaled by its time overlap with [tu_start, tu_end].
+        None if the dataset has no usable stored files at all (caller falls back to records x columns).'''
+        import os
+        from load_cdf.models import CDFFileStored
+
+        #loaded only: a re-upload leaves the replaced file's old row behind (loaded=False), it would count twice
+        files = CDFFileStored.objects.filter(upload__dataset=dataset, loaded=True, tu_start__isnull=False, tu_end__isnull=False)
+        if not files.exists():
+            return None
+
+        total = 0
+        #only files overlapping the request come out of the DB, so cost grows with the request, not the dataset
+        overlapping = files.filter(tu_end__gt=tu_start, tu_start__lt=tu_end).values_list('tu_start', 'tu_end', 'file_size', 'full_path')
+        for f_start, f_end, size, path in overlapping:
+            if f_end <= f_start:
+                continue
+            if size is None: #registered before file_size existed and not backfilled -> disk
+                if not os.path.exists(path):
+                    continue
+                size = os.path.getsize(path)
+            overlap = min(f_end, tu_end) - max(f_start, tu_start)
+            total += size * overlap / (f_end - f_start)
         return total
 
 #TODO: will be implemented during auth module work

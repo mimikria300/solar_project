@@ -117,7 +117,8 @@ class Command(UploadRequired, BaseCommand):
 
             cdf_stored_instances = [CDFFileStored(
                 full_path=os.path.join(dataset_dir_path, cdf_filename),
-                upload=upload
+                upload=upload,
+                file_size=os.path.getsize(os.path.join(temp_dir, cdf_filename)), #temp copy exists even with --no-mv
             ) for cdf_filename in files_to_register]
 
             if cdf_stored_instances:
