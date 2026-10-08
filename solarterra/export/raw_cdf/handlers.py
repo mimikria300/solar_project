@@ -25,13 +25,13 @@ def find_cdf_files(variables, ts_start, ts_end):
     return qs
 
 
-def raw_cdf_export(variables, ts_start, ts_end):
+def raw_cdf_export(job):
     '''
     Export raw CDF files for the requested variables and time range as a zip archive.
     Returns a StreamingHttpResponse with the zipped CDF files.
     '''
     #TODO: CRUDE AF, raw_cdf shall have it's own ui endpoint
-    qs = find_cdf_files(variables, ts_start, ts_end)
+    qs = find_cdf_files(job.variables, job.ts_start, job.ts_end)
 
     print(f"[EXPORT] raw_cdf: found {qs.count()} CDF files to export")
 
@@ -52,9 +52,7 @@ def raw_cdf_export(variables, ts_start, ts_end):
     zip_buffer.seek(0)
     
     # Generate filename for the download
-    ts_start_str = ts_start.strftime('%Y%m%d%H%M')
-    ts_end_str = ts_end.strftime('%Y%m%d%H%M')
-    zip_filename = f"cdf_export_{ts_start_str}_{ts_end_str}.zip"
+    zip_filename = f"cdf_export_{job.dt_str}.zip"
     
     # Return the zip file as a response
     response = HttpResponse(zip_buffer.getvalue(), content_type='application/zip')

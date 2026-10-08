@@ -6,6 +6,7 @@ from export.clean_cdf.handlers import clean_cdf_export, multi_clean_cdf_export
 from pages.forms import VariableSelectForm
 from export.forms import ExportForm
 from export.middleware import SizeCheckMiddleware
+from export.job import ExportJob
 #from export.middleware import AuthMiddleware, RateLimitMiddleware, FormatChoiceMiddleware
 
 MIDDLEWARE_LIST = [
@@ -31,9 +32,18 @@ def export_dispatcher(request):
         # for safety, export_clicked view already does that
         return HttpResponse("Invalid export request", status=400)
 
-    #one dict per form, not merged (both forms even have a "validate" field)
-    request.var_data = var_form.cleaned_data
-    request.export_data = export_form.cleaned_data
+    var_data = var_form.cleaned_data
+    export_data = export_form.cleaned_data
+    job = ExportJob(
+        export_format=export_data["export_format"],
+        variables=var_data["variables"],
+        ts_start=var_data["ts_start"],
+        ts_end=var_data["ts_end"],
+        aggregate=export_data["aggregate"],
+        validate=export_data["validate"], #ExportForm's, not VariableSelectForm's
+    )
+    #everything we add to the request lives in ONE dict -> `del request.export_context` drops it all if something safety-related happens
+    request.export_context = {"job": job}
 
     # Run middleware stack to а) enrich the request and b) potentially short-circuit the processing
 
@@ -42,55 +52,37 @@ def export_dispatcher(request):
         if response is not None:  # Short-circuit and return a middleware-specific responce
             return response
 
-    # Extract parameters from request (e.g., dataset, variables, time range, aggregate, validate)
-
-    export_format = request.export_data["export_format"]
-    variables = request.var_data["variables"]
-    ts_start = request.var_data["ts_start"]
-    ts_end = request.var_data["ts_end"]
-
-    aggregate = request.export_data["aggregate"]
-    validate = request.export_data["validate"]
-
     #SECTION - raw_cdf
-    if export_format == "raw_cdf": 
-        return raw_cdf_export(variables, ts_start, ts_end)
+    if job.export_format == "raw_cdf":
+        return raw_cdf_export(job)
     
     #SECTION - plain_text
-    elif export_format == "plain_text": 
+    elif job.export_format == "plain_text":
 
         # Determine if single file or multi-file export is needed
-        #quiery containing a single var from a distinct group filtered by dataset tag and depend_0
-        var_groups = list(variables.order_by('dataset__tag').distinct('dataset__tag', 'depend_0'))
+        #one var per distinct group (dataset tag + depend_0)
+        var_groups = job.var_groups()
 
         print(f"[EXPORT] Distinct file groups: {len(var_groups)}")
-
-        dt_str = ts_start.strftime('%Y%m%d%H%M') + '_' + ts_end.strftime('%Y%m%d%H%M')
-        mode_tag = f"{'agg' if aggregate else 'full'}_{'val' if validate else 'raw'}"
 
         # Call single_file_export or multi_file_export accordingly
         if len(var_groups) == 1:
             item = var_groups[0]
-            var_group = variables.filter(dataset=item.dataset, depend_0=item.depend_0).order_by('name')
-            response = single_file_export(item.dataset, var_group, ts_start, ts_end, aggregate, validate, dt_str, mode_tag)
+            response = single_file_export(job, item.dataset, job.group_vars(item))
 
         else: #safe, it's not zero, data is cleaned and form is verified
-            response = multi_file_export(variables, var_groups, ts_start, ts_end, aggregate, validate, dt_str, mode_tag)
+            response = multi_file_export(job, var_groups)
         return response
 
     #SECTION - clean_cdf
-    elif export_format == "clean_cdf": 
+    elif job.export_format == "clean_cdf":
 
         #cdf per var group (dataset + depend_0), zip if many
-        var_groups = list(variables.order_by('dataset__tag').distinct('dataset__tag', 'depend_0'))
-        dt_str = ts_start.strftime('%Y%m%d%H%M') + '_' + ts_end.strftime('%Y%m%d%H%M')
-        mode_tag = f"{'agg' if aggregate else 'full'}_{'val' if validate else 'raw'}"
-
+        var_groups = job.var_groups()
         if len(var_groups) == 1:
             item = var_groups[0]
-            var_group = variables.filter(dataset=item.dataset, depend_0=item.depend_0).order_by('name')
-            return clean_cdf_export(item.dataset, var_group, ts_start, ts_end, aggregate, validate, dt_str, mode_tag)
-        return multi_clean_cdf_export(variables, var_groups, ts_start, ts_end, aggregate, validate, dt_str, mode_tag)
+            return clean_cdf_export(job, item.dataset, job.group_vars(item))
+        return multi_clean_cdf_export(job, var_groups)
     
     #SECTION - unsupported format
     else: 

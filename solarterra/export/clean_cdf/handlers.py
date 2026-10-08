@@ -28,7 +28,8 @@ DEFAULT_FLOAT_FILL = -1.0e31
 #CDF_EPOCH is ms since year 0, unix is s since 1970
 EPOCH_UNIX_OFFSET_MS = 62167219200000.0
 
-#Dataset field -> ISTP global attr name
+#Dataset field -> ISTP global attr name; 
+#note that ISTP uses another formatting convention for global attributes, e.g. "Mission_group"
 GLOBAL_ATTRIBUTE_MAP = [
     ("mission", "MISSION_GROUP"),
     ("source_name", "SOURCE_NAME"),
@@ -44,21 +45,20 @@ GLOBAL_ATTRIBUTE_MAP = [
 
 
 #---EXPORTS---
-def clean_cdf_export(dataset, var_group, ts_start, ts_end, aggregate, validate, dt_str, mode_tag):
+def clean_cdf_export(job, dataset, var_group):
     '''Single var group -> single CDF file response.'''
-    filename, cdf_bytes = _make_cdf_file(dataset, var_group, ts_start, ts_end, aggregate, validate, dt_str, mode_tag)
+    filename, cdf_bytes = _make_cdf_file(job, dataset, var_group)
     response = HttpResponse(cdf_bytes, content_type='application/x-cdf')
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
     return response
 
 
-def multi_clean_cdf_export(variables, var_groups, ts_start, ts_end, aggregate, validate, dt_str, mode_tag):
+def multi_clean_cdf_export(job, var_groups):
     '''One CDF per var group, zipped -> response'''
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
         for item in var_groups:
-            var_group = variables.filter(dataset=item.dataset, depend_0=item.depend_0).order_by('name')
-            filename, cdf_bytes = _make_cdf_file(item.dataset, var_group, ts_start, ts_end, aggregate, validate, dt_str, mode_tag)
+            filename, cdf_bytes = _make_cdf_file(job, item.dataset, job.group_vars(item))
             zip_file.writestr(filename, cdf_bytes)
 
     zip_timestamp = dt.datetime.now().strftime("%Y-%m-%d-%H-%M")
@@ -68,35 +68,34 @@ def multi_clean_cdf_export(variables, var_groups, ts_start, ts_end, aggregate, v
 
 
 #---PIPELINE---
-def _make_cdf_file(dataset, var_group, ts_start, ts_end, aggregate, validate, dt_str, mode_tag):
+def _make_cdf_file(job, dataset, var_group):
     '''Builds one CDF -> (filename, cdf_bytes). No data still gives a file, with a note.'''
     writer = CleanCDFWriter(dataset, var_group)
-    result = _fetch_data(writer, ts_start, ts_end, aggregate, validate)
+    result = _fetch_data(writer, job)
 
-    file_dt_str = dt_str
+    file_dt_str = job.dt_str
     bin_size = None
     if result is not None:
         time_array, columns, valid, bin_size = result
-        if aggregate:
+        if job.aggregate:
             file_dt_str = ft(time_array[0]).strftime('%Y%m%d%H%M') + '_' + ft(time_array[-1]).strftime('%Y%m%d%H%M')
 
-    filename = f"{dataset.tag}_{writer.depend_var.name}_{mode_tag}_{file_dt_str}.cdf"
+    filename = f"{dataset.tag}_{writer.depend_var.name}_{job.mode_tag}_{file_dt_str}.cdf"
     info = {
-        'filename': filename, 'ts_start': ts_start, 'ts_end': ts_end,
-        'aggregate': aggregate, 'validate': validate, 'bin_size': bin_size,
+        'filename': filename, 'ts_start': job.ts_start, 'ts_end': job.ts_end,
+        'aggregate': job.aggregate, 'validate': job.validate, 'bin_size': bin_size,
     }
 
-    #v3 format, otherwise no TT2000/INT8
-    pycdf.lib.set_backward(False)
+    pycdf.lib.set_backward(False) #v3 format, otherwise no TT2000/INT8, not python 2.7 compatible
     with tempfile.TemporaryDirectory() as temp_dir:
         cdf_path = os.path.join(temp_dir, filename)
         cdf = pycdf.CDF(cdf_path, '')
         try:
             writer.write_global_attrs(cdf, info)
             if result is None:
-                writer.note(f"No data for the requested interval {ts_start} to {ts_end}")
+                writer.note(f"No data for the requested interval {job.ts_start} to {job.ts_end}")
             else:
-                writer.write_data(cdf, time_array, columns, valid, aggregate)
+                writer.write_data(cdf, time_array, columns, valid, job.aggregate)
             writer.write_notes(cdf)
         finally:
             cdf.close()
@@ -108,13 +107,13 @@ def _make_cdf_file(dataset, var_group, ts_start, ts_end, aggregate, validate, dt
     return filename, cdf_bytes
 
 
-def _fetch_data(writer, ts_start, ts_end, aggregate, validate):
+def _fetch_data(writer, job):
     '''Query, validate, aggregate -> (time_array, columns, valid, bin_size). None if there's no data.'''
     data = DataHandler(
         dataset=writer.dataset,
         filter_field=writer.depend_field,
-        ts_start=ts_start,
-        ts_stop=ts_end,
+        ts_start=job.ts_start,
+        ts_stop=job.ts_end,
         fields=writer.data_fields,
     )
     data.query()
@@ -122,10 +121,10 @@ def _fetch_data(writer, ts_start, ts_end, aggregate, validate):
         return None
 
     data.set_data()
-    if validate:
+    if job.validate:
         data.add_validation_to_mask()
 
-    if aggregate:
+    if job.aggregate:
         data.set_bin_arrays()
         data.set_bin_map()
         data.set_aggregated_data()
