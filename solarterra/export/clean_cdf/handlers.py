@@ -9,7 +9,7 @@ from django.http import HttpResponse
 from spacepy import pycdf
 import numpy as np
 import datetime as dt
-import tempfile, os, io, zipfile
+import tempfile, os, io, zipfile, ctypes
 
 #DataType.numpy_type has holes (CDF_UINT2 is None), so own map
 CDF_NUMPY_TYPES = {
@@ -181,7 +181,7 @@ class CleanCDFWriter():
         '''Time array is in unix seconds; columns/valid are expanded like data_by_var (array field = array_size columns).'''
         epoch_name = self.depend_var.name
         epoch_values, epoch_type = self._epoch_values(time_array, self.depend_var.datatype)
-        cdf.new(epoch_name, data=epoch_values, type=epoch_type)
+        self._new_record_var(cdf, epoch_name, epoch_values, epoch_type)
         self.written_vars.add(epoch_name)
         self._write_common_attrs(cdf, cdf[epoch_name], self.depend_var, np.float64, epoch_type)
         if aggregate:
@@ -202,9 +202,11 @@ class CleanCDFWriter():
             values, np_type, cdf_type, fill = prepared
 
             try:
-                cdf.new(var.name, data=values, type=cdf_type)
+                self._new_record_var(cdf, var.name, values, cdf_type)
             except Exception as e:
                 self.note(f"{var.name}: can't write data ({e}), variable skipped")
+                if var.name in cdf:
+                    del cdf[var.name] #half-made var (created, data failed) out of the file
                 continue
             self.written_vars.add(var.name)
             cdf_var = cdf[var.name]
@@ -226,6 +228,16 @@ class CleanCDFWriter():
     def note(self, msg):
         print(f"[EXPORT] clean_cdf: {msg}")
         self.notes.append(msg)
+
+    def _new_record_var(self, cdf, name, values, cdf_type):
+        '''Record-varying var sized to its data. Blocking factor = record count, else the CDF lib preallocates spare records (~2x file size).'''
+        values = np.asarray(values)
+        cdf_var = cdf.new(name, type=cdf_type, dims=list(values.shape[1:]) or None)
+        #spacepy has no public setter for this, so the raw CDF lib call
+        cdf_var._call(pycdf.const.PUT_, pycdf.const.zVAR_BLOCKINGFACTOR_, ctypes.c_long(max(len(values), 1)))
+        #raw = values go in as-is (EPOCH ms / TT2000 ns already converted), no datetime guessing
+        cdf.raw_var(name)[...] = values
+        return cdf_var
 
     def _prepare_values(self, var, raw, ok, aggregate, size):
         '''Raw values + mask -> (values, np_type, cdf_type, fill), shaped for CDF. None if the type is unknown.'''
