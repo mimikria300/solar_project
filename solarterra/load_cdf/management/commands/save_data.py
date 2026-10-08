@@ -13,6 +13,10 @@ from load_cdf.utils import *
 from solarterra.utils import ts_float_resolver as tf
 
 from .evaluate_extras import UploadRequired, command_logger
+import logging
+
+
+logger = logging.getLogger('solarterra.save_data')
 
 
 def save_single_file(cdf_file, fields, model_class, upload):
@@ -114,7 +118,7 @@ def save_single_file(cdf_file, fields, model_class, upload):
     
     model_class.objects.bulk_create(instances)
     cdf_file.update(loaded=True, saved_rows=len(instances), tu_start=min_epoch, tu_end=max_epoch)
-    print(len(instances)) 
+    logger.info(f"{len(instances)}") 
     del arr_collection
     del zipped_collection
     del instances
@@ -212,7 +216,7 @@ class Command(UploadRequired, BaseCommand):
             
             if current_percent > percent:
                 make_log_entry(f"{current_percent}% done, {index + 1} files uploaded, total time {round(sum(deltas), 5)}, avg time per file {round(sum(deltas) / len(deltas), 5)}", upload=upload)
-                print(f"{current_percent}% done, {index + 1} files uploaded, total time {round(sum(deltas), 5)}, avg time per file {round(sum(deltas) / len(deltas), 5)}")
+                logger.info(f"{current_percent}% done, {index + 1} files uploaded, total time {round(sum(deltas), 5)}, avg time per file {round(sum(deltas) / len(deltas), 5)}")
                 percent = current_percent
         
         upload.dataset.rebuild_time_range()

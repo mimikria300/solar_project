@@ -151,7 +151,7 @@ def n_trace(plot):
         fig.add_trace(go.Scatter(
             x=x,
             y=y,
-            connectgaps=False,
+            connectgaps=True,
             mode="lines+markers",
         ),
             row=index + 1,

@@ -1,5 +1,10 @@
 from django.core.management.base import BaseCommand
 from load_cdf.models import Upload, make_log_entry
+import logging
+
+
+logger = logging.getLogger('solarterra.evaluate')
+
 
 # decorator to log command calls
 def command_logger(func):
@@ -14,7 +19,7 @@ def command_logger(func):
                 # if it is not possible to attach this log to upload, just do not do it
                 pass
 
-        print("UPLOAD", upload)
+        logger.debug(f"UPLOAD {upload}")
         make_log_entry(f"In {func.__module__}:", "START", upload)
         func(*args, **kwargs)
         make_log_entry(f"Completed {func.__module__}", "EXIT", upload)

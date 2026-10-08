@@ -2,6 +2,10 @@ import time
 from datetime import datetime, timezone
 from django.db import connection
 from .base import BaseChecker, ComponentResult, Status
+import logging
+
+
+logger = logging.getLogger('solarterra.healthcheck.database')
 
 
 _SLOW_THRESHOLD_SEC = 0.5
@@ -15,6 +19,7 @@ class DatabaseChecker(BaseChecker):
         try:
             time_test = self._ping()
         except Exception as e:
+            logger.error(f"Test request failed", exc_info=True)
             return ComponentResult(
                 name="database",
                 status=Status.DOWN,

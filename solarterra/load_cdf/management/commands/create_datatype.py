@@ -1,6 +1,10 @@
 from django.core.management.base import BaseCommand
 from load_cdf.models import DataType
 from solarterra.utils import *
+import logging
+
+
+logger = logging.getLogger('solarterra.create_datatype')
 
 
 TYPE_CONVERSION = {
@@ -80,7 +84,7 @@ class Command(BaseCommand):
 
         datatypes = []
         for cdf_file_label, django_field in TYPE_CONVERSION.items():
-            print(cdf_file_label, django_field)
+            logger.debug(f"{cdf_file_label} {django_field}")
 
             numpy_type = TYPE_NUMPY[cdf_file_label] if cdf_file_label in TYPE_NUMPY.keys() else None
             

@@ -1,6 +1,10 @@
 from django.core.management.base import BaseCommand
 from load_cdf.models import *
 from .evaluate_extras import command_logger, UploadRequired
+import logging
+
+
+logger = logging.getLogger('solarterra.evaluate')
 
 
 class Command(UploadRequired, BaseCommand):
@@ -22,7 +26,7 @@ class Command(UploadRequired, BaseCommand):
         # open all dynamic_fields, check that datatype for ech one exist
         for field in fieldset:
             variable = field.variable_instance
-            print(f"{field.field_name} {variable.datatype} {variable.fillval}")
+            logger.debug(f"{field.field_name} {variable.datatype} {variable.fillval}")
             try:
                 data_type_instance = DataType.objects.get(cdf_file_label=variable.datatype)
             except:

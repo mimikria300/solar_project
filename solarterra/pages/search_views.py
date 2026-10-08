@@ -8,6 +8,10 @@ import datetime as dt
 
 from pages.plotting import get_plots
 from export.dispatcher import export_dispatcher
+import logging
+
+
+logger = logging.getLogger('solarterra.plot')
 
 '''
 NB: for convinience ts_start is always in timestamp format. 
@@ -131,7 +135,7 @@ def plot_clicked(request):
         plots = get_plots(var_instances, ts_start, ts_stop, validate)
 
         for plot in plots:
-            print(
+            logger.info(
                 f"[invalid_values] dataset={plot.variable.dataset.tag}, "
                 f"variable={plot.variable.name}, "
                 f"invalid_values={plot.invalid_values}"
@@ -160,29 +164,6 @@ def plot_clicked(request):
 
         return render(request, "pages/variable_select.html", context)
 
-
-    if var_form.is_valid() and export_form.is_valid():
-
-        #export_format = export_form.cleaned_data["export_format"]
-        variables = var_form.cleaned_data["variables"]
-        ts_start = var_form.cleaned_data["ts_start"]
-        ts_end = var_form.cleaned_data["ts_end"]
-
-        return HttpResponse('Export stub!', status=200)
-
-    #forms aren't ok, re-render search page with errors
-    else:
-
-        context = {
-            'datasets': datasets,
-            'var_form': var_form,
-            'plot_form': plot_form,
-            'export_form': export_form,
-            'selected_missions': selected_missions,
-            "has_errors": any([bool(var_form.errors), bool(plot_form.errors), bool(export_form.errors)]),
-        }
-
-        return render(request, "pages/variable_select.html", context)
 
 def export_clicked(request):
     if request.method != "POST":

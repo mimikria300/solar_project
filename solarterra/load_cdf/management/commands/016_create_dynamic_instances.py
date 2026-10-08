@@ -4,6 +4,10 @@ from django.conf import settings
 from load_cdf.models import *
 from load_cdf.utils import safe_str, to_python_identifier
 from .evaluate_extras import command_logger, UploadRequired
+import logging
+
+
+logger = logging.getLogger('solarterra.evaluate')
 
 
 class Command(UploadRequired, BaseCommand):
@@ -53,7 +57,7 @@ class Command(UploadRequired, BaseCommand):
     
         for variable in variables:
             var_name = safe_str(variable.name)
-            print(f"var '{var_name}', dims {variable.dims}, dim_sizes {variable.dim_sizes}, labels {variable.lablaxis}")
+            logger.debug(f"var '{var_name}', dims {variable.dims}, dim_sizes {variable.dim_sizes}, labels {variable.lablaxis}")
 
             if variable.is_nrv():
                 continue

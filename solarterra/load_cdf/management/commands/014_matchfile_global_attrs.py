@@ -2,6 +2,11 @@ from django.core.management.base import BaseCommand
 from load_cdf.models import make_log_entry
 import json
 from .evaluate_extras import command_logger, UploadRequired
+import logging
+
+
+logger = logging.getLogger('solarterra.evaluate')
+
 
 class Command(UploadRequired, BaseCommand):
 
@@ -28,7 +33,7 @@ class Command(UploadRequired, BaseCommand):
         # if dataset instance already exists, compare and contrast first
         # populate dataset fields from JSON
         for field in global_attrs.keys():
-            print(f"FIELD {field} in global attr cycle")
+            logger.debug(f"FIELD {field} in global attr cycle")
             attribute = field.lower()
             value = global_attrs[field]['value']
             value = value if isinstance(value, str) else '\n'.join(value)

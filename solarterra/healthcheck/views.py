@@ -2,10 +2,12 @@ from datetime import datetime, timezone
 from django.http import JsonResponse
 from .checkers.base import Status
 from .checkers.database import DatabaseChecker
+from .checkers.api import ApiChecker
 
 
 _CHECKERS = [
     DatabaseChecker(),
+    ApiChecker(),
 ]
 
 

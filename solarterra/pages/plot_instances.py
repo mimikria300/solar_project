@@ -5,6 +5,10 @@ from solarterra.utils import float_ts_resolver as ft
 import math
 import datetime as dt
 from pages.figures import scatter, n_trace, spectrogram
+import logging
+
+
+logger = logging.getLogger('solarterra.plot')
 
 
 class DBQuery():
@@ -92,11 +96,9 @@ class Bin():
         self.half_bin = math.ceil(self.bin_seconds / 2)
 
     def t_next(self, t_current):
-        #print(f"in t_next : {t_current}, {t_current + self.bin_td}")
         return t_current + self.bin_td
 
     def t_previous(self, t_current):
-        #print(f"in t_prev : {t_current}, {t_current - self.bin_td}")
         return t_current - self.bin_td
 
 
@@ -218,7 +220,6 @@ class Plot():
         condition = False
         
         if self.variable.validmin is not None:
-            #print(type(self.variable.validmin))
           
             if field_index is not None and isinstance(self.variable.validmin, list):
                 validmin = self.variable.validmin[field_index]
@@ -293,7 +294,7 @@ class Plot():
 
             # if no aggregation groups survived - no points on the plot
             if idx.shape[0] == 0:
-                print(f"no data in field {self.y_db_field}, out of {self.variable.name} {self.variable.dataset}")
+                logger.debug(f"no data in field {self.y_db_field}, out of {self.variable.name} {self.variable.dataset}")
                 self.y_arrays.append([])
                 continue
 

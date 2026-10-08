@@ -1,6 +1,9 @@
-
 from pages.plot_instances import Bin, DBQuery, Plot, SpectrogramPlot
 from load_cdf.models import DynamicField
+import logging
+
+
+logger = logging.getLogger('solarterra.plot')
 
 
 def get_plots(variables, t_start, t_end, validate):
@@ -19,7 +22,7 @@ def get_plots(variables, t_start, t_end, validate):
         vars_in_query = ts_variables.filter(dataset=item.dataset, depend_0=item.depend_0).order_by('name')
 
         if item.depend_0 is None:
-            print(f"No dependent axis specified for dataset '{item.dataset}', vars '{vars_in_query}'! Skipping")
+            logger.warning(f"No dependent axis specified for dataset '{item.dataset}', vars '{vars_in_query}'! Skipping")
             continue
         
         filter_field = item.get_depend_field().field_name
@@ -63,7 +66,6 @@ def get_plots(variables, t_start, t_end, validate):
 
             # get the plotly figure
             plot.get_figure()
-            #print(plot.variable.name, plot.bin_size)
             plots.append(plot)
     
     for var in spec_variables:

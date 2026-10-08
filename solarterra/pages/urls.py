@@ -12,13 +12,12 @@ urlpatterns = [
     path('variable_info/<uuid:variable_id>', views.variable_info, name="variable"),
     
     # search, export and plotting
-    path("missions", search_views.select_missions, name="select_missions"),
-    path('search', search_views.select_variables, name="select_variables"),
+    path('missions', search_views.select_missions, name="select_missions"),
+    path('variables', search_views.select_variables, name="select_variables"),
     path('plot', search_views.plot_clicked, name="plot_clicked"),
-    path('export_clicked', search_views.export_clicked, name="export_clicked"), #is a placeholder for more complex logic, gets a file responce anyway 
+    path('export', search_views.export_clicked, name="export_clicked"), #is a placeholder for more complex logic, gets a file responce anyway 
     
     # technical data
     path('system_data', views.system_data, name="system_data"),
     path('logs', views.logs, name="logs"),
-
 ]
