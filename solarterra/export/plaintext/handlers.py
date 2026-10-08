@@ -14,8 +14,25 @@ import numpy as np
 import datetime as dt
 import tempfile, os, shutil, zipfile, io
 
+def plain_text_stream(ptm, rows):
+    '''
+    Streaming formatter for pre-loaded, pre-processed data.
+    Use when the data pipeline runs in the caller (e.g. to resolve actual filename before streaming starts).
 
-def _process_group(dataset, var_group, ts_start, ts_end, aggregate, validate, dt_str):
+    ptm: PlainTextMeta instance with info already fully set.
+    rows: numpy record array (data_by_record or agg_data_by_record), or None if no data in range.
+    '''
+    yield from ptm.stream_header()
+    if rows is None:
+        yield f"# No data for the specified time range {ptm.info['ts_start']} to {ptm.info['ts_end']}\n"
+        yield from ptm.stream_footer()
+        return
+    yield from ptm.stream_label_rows()
+    yield from ptm.stream_formatted_rows(rows)
+    yield from ptm.stream_footer()
+
+
+def _process_single_group(dataset, var_group, ts_start, ts_end, aggregate, validate, dt_str):
     '''
     Build the ptm/data pipeline for one variable group (shared by single_file_export and multi_file_export).
     Returns (ptm, rows, file_dt_str) — rows is None when there's no data in range, in which case file_dt_str falls back to dt_str.
@@ -63,30 +80,12 @@ def _process_group(dataset, var_group, ts_start, ts_end, aggregate, validate, dt
     return ptm, data.data_by_record, dt_str
 
 
-def plain_text_stream(ptm, rows):
-    '''
-    Streaming formatter for pre-loaded, pre-processed data.
-    Use when the data pipeline runs in the caller (e.g. to resolve actual filename before streaming starts).
-
-    ptm: PlainTextMeta instance with info already fully set.
-    rows: numpy record array (data_by_record or agg_data_by_record), or None if no data in range.
-    '''
-    yield from ptm.stream_header()
-    if rows is None:
-        yield f"# No data for the specified time range {ptm.info['ts_start']} to {ptm.info['ts_end']}\n"
-        yield from ptm.stream_footer()
-        return
-    yield from ptm.stream_label_rows()
-    yield from ptm.stream_formatted_rows(rows)
-    yield from ptm.stream_footer()
-
-
 def single_file_export(dataset, var_group, ts_start, ts_end, aggregate, validate, dt_str, mode_tag):
     '''
     Build the ptm/data pipeline for one variable group and stream it back as a single plain-text file.
     Returns a StreamingHttpResponse ready to hand back from the view.
     '''
-    ptm, rows, real_dt_str = _process_group(dataset, var_group, ts_start, ts_end, aggregate, validate, dt_str)
+    ptm, rows, real_dt_str = _process_single_group(dataset, var_group, ts_start, ts_end, aggregate, validate, dt_str)
 
     filename = f"{dataset.tag}_{var_group[0].depend_0}_{mode_tag}_{real_dt_str}.txt"
 
@@ -119,7 +118,7 @@ def multi_file_export(variables, var_groups, ts_start, ts_end, aggregate, valida
             print(f"[EXPORT] Processing variable group: {item.dataset.tag} {item.depend_0}")
             var_group = variables.filter(dataset=item.dataset, depend_0=item.depend_0).order_by('name')
 
-            ptm, rows, real_dt_str = _process_group(item.dataset, var_group, ts_start, ts_end, aggregate, validate, dt_str)
+            ptm, rows, real_dt_str = _process_single_group(item.dataset, var_group, ts_start, ts_end, aggregate, validate, dt_str)
 
             filename = f"{item.dataset.tag}_{item.depend_0}_{mode_tag}_{real_dt_str}.txt"
             filepath = os.path.join(export_dir, filename)

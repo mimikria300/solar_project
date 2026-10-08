@@ -6,7 +6,19 @@ These are defaults; override in settings.py as needed.
 """
 
 # Hard ceiling on total export size (bytes) before SizeCheckMiddleware rejects the request.
+#override via EXPORT_MAX_SIZE_BYTES in django settings (set it tiny to demo the 413)
 EXPORT_MAX_SIZE_BYTES = 5 * 1024 ** 3  # 5 GB
+
+#rough bytes per value for size estimates, roughly rounded up
+BYTES_PER_VALUE = {
+    "plain_text": 16,
+    "clean_cdf": 8,
+}
+
+
+def get_max_export_size():
+    from django.conf import settings
+    return getattr(settings, "EXPORT_MAX_SIZE_BYTES", EXPORT_MAX_SIZE_BYTES)
 
 # Max number of export requests a single user can make per day, anti-DDOS measure (RateLimitMiddleware).
 RATE_LIMIT_PER_USER_PER_DAY = 500

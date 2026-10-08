@@ -462,7 +462,7 @@ class Variable(models.Model):
     def ordered_attributes(self):
         return self.attributes.order_by('title')
 
-    def _pick_axis_value(self, value, index=None):
+    def pick_axis_value(self, value, index=None):
         if value is None:
             return ""
 
@@ -479,7 +479,7 @@ class Variable(models.Model):
 
         return str(value).strip()
     
-    def _get_axis_labels_source(self):
+    def get_axis_labels_source(self):
         if self.lablaxis:
             return self.lablaxis
 
@@ -491,8 +491,8 @@ class Variable(models.Model):
         ).values_list('value', flat=True).first()
 
     def get_axis_label(self, index=None):
-        label = self._pick_axis_value(self._get_axis_labels_source(), index)
-        unit = self._pick_axis_value(self.units, index)
+        label = self.pick_axis_value(self.get_axis_labels_source(), index)
+        unit = self.pick_axis_value(self.units, index)
 
         if label and unit:
             return f"{label}, {unit}"

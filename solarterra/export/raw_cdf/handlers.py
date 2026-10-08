@@ -7,13 +7,9 @@ from load_cdf.models import Upload, CDFFileStored
 from solarterra.utils import float_ts_resolver as ft
 from solarterra.utils import ts_float_resolver as tf
 
-def raw_cdf_export(variables, ts_start, ts_end):
-    '''
-    Export raw CDF files for the requested variables and time range as a zip archive.
-    Returns a StreamingHttpResponse with the zipped CDF files.
-    '''
-    # Extract parameters from request (e.g., dataset, variables, time range)
-    #TODO: CRUDE AF, raw_cdf shall have it's own ui endpoint
+def find_cdf_files(variables, ts_start, ts_end):
+    '''Stored CDF files overlapping the time range. 
+    NB: Size check uses it too.'''
     valid_datasets = variables.values_list('dataset', flat=True).distinct()
     upload_instances = Upload.objects.filter(dataset__in=valid_datasets)
 
@@ -26,11 +22,21 @@ def raw_cdf_export(variables, ts_start, ts_end):
         | Q(tu_end__gte=tu_start, tu_end__lte=tu_end)
         | Q(tu_start__lte=tu_start, tu_end__gte=tu_end)
     ).order_by('upload','tu_start')
-    
+    return qs
+
+
+def raw_cdf_export(variables, ts_start, ts_end):
+    '''
+    Export raw CDF files for the requested variables and time range as a zip archive.
+    Returns a StreamingHttpResponse with the zipped CDF files.
+    '''
+    #TODO: CRUDE AF, raw_cdf shall have it's own ui endpoint
+    qs = find_cdf_files(variables, ts_start, ts_end)
+
     print(f"[EXPORT] raw_cdf: found {qs.count()} CDF files to export")
 
     # Create zip file in memory (no temp disk files, no full copies of existing CDF files)
-    # BytesIO holds the compressed data only — ZIP_DEFLATED compresses on-the-fly as we add files
+    # BytesIO holds the compressed data only — ZIP_DEFLATED compresses on-the-fly
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
         for cdf_file in qs:

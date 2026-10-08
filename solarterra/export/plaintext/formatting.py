@@ -77,8 +77,8 @@ class PlainTextMeta():
                 self.units.append('dd-mm-yyyy hh:mm:ss.ms')
                 continue
             var = df.variable_instance
-            label = var._pick_axis_value(var._get_axis_labels_source(), index)
-            unit = var._pick_axis_value(var.units, index) 
+            label = var.pick_axis_value(var.get_axis_labels_source(), index)
+            unit = var.pick_axis_value(var.units, index) 
             self.labels.append(label if label else '')
             self.units.append(unit if unit else '')
 
