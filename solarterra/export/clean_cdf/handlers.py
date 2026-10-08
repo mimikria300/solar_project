@@ -28,19 +28,11 @@ DEFAULT_FLOAT_FILL = -1.0e31
 #CDF_EPOCH is ms since year 0, unix is s since 1970
 EPOCH_UNIX_OFFSET_MS = 62167219200000.0
 
-#Dataset field -> ISTP global attr name; 
-#note that ISTP uses another formatting convention for global attributes, e.g. "Mission_group"
-GLOBAL_ATTRIBUTE_MAP = [
-    ("mission", "MISSION_GROUP"),
-    ("source_name", "SOURCE_NAME"),
-    ("data_type", "DATA_TYPE"),
-    ("instrument", "DESCRIPTOR"),
-    ("dataset_version", "DATA_VERSION"),
-    ("logical_source", "LOGICAL_SOURCE"),
-    ("logical_description", "LOGICAL_SOURCE_DESCRIPTION"),
-    ("pi_name", "PI_NAME"),
-    ("pi_affiliation", "PI_AFFILIATION"),
-    ("text_description", "TEXT"),
+#global attr names = matchfile GlobalAttributes keys, Dataset field = key.lower(); same names as plaintext export
+#note that ISTP uses another formatting convention for global attributes, e.g. "Mission_group" (ours only, unless Sasha says so)
+GLOBAL_ATTRIBUTE_KEYS = [
+    "MISSION", "SOURCE_NAME", "DATA_TYPE", "INSTRUMENT", "DATASET_VERSION",
+    "TEXT_DESCRIPTION", "LOGICAL_SOURCE", "LOGICAL_DESCRIPTION", "PI_NAME", "PI_AFFILIATION",
 ]
 
 
@@ -157,26 +149,27 @@ class CleanCDFWriter():
 
     #---WRITING---
     def write_global_attrs(self, cdf, info):
-        for field, attr_name in GLOBAL_ATTRIBUTE_MAP:
-            value = getattr(self.dataset, field, None)
+        for key in GLOBAL_ATTRIBUTE_KEYS:
+            value = getattr(self.dataset, key.lower(), None)
             if value:
-                cdf.attrs[attr_name] = str(value)
+                cdf.attrs[key] = str(value)
         upload = Upload.objects.filter(dataset=self.dataset).exclude(matchfile_version="").order_by('-created').first()
         if upload is not None:
-            cdf.attrs['Matchfile_version'] = upload.matchfile_version
-        cdf.attrs['Logical_file_id'] = info['filename'].rsplit('.', 1)[0]
-        cdf.attrs['Generated_by'] = 'solarterra clean CDF export (IKI RAN)'
-        cdf.attrs['Generation_date'] = NOW().strftime('%Y-%m-%d %H:%M:%S UTC')
-        cdf.attrs['Requested_interval'] = f"{info['ts_start']} to {info['ts_end']}"
-        cdf.attrs['Validation'] = (
+            cdf.attrs['MATCHFILE_VERSION'] = upload.matchfile_version
+        #our own attrs, same UPPER style
+        cdf.attrs['LOGICAL_FILE_ID'] = info['filename'].rsplit('.', 1)[0]
+        cdf.attrs['GENERATED_BY'] = 'solarterra clean CDF export (IKI RAN)'
+        cdf.attrs['GENERATION_DATE'] = NOW().strftime('%Y-%m-%d %H:%M:%S UTC')
+        cdf.attrs['REQUESTED_INTERVAL'] = f"{info['ts_start']} to {info['ts_end']}"
+        cdf.attrs['VALIDATION'] = (
             'Values outside VALIDMIN/VALIDMAX replaced with FILLVAL' if info['validate'] else 'Not validated'
         )
         if info['aggregate'] and info['bin_size'] is not None:
-            cdf.attrs['Aggregation'] = (
+            cdf.attrs['AGGREGATION'] = (
                 f"Averaged into {info['bin_size']:.3f}s bins; time values are bin centers; empty bins are FILLVAL"
             )
         else:
-            cdf.attrs['Aggregation'] = 'None'
+            cdf.attrs['AGGREGATION'] = 'None'
         #machine-readable twins of the two texts above; CDF attrs have no bool type -> 'True'/'False' strings
         cdf.attrs['IS_VALIDATED'] = str(bool(info['validate']))
         cdf.attrs['IS_AGGREGATED'] = str(bool(info['aggregate']))
@@ -223,7 +216,7 @@ class CleanCDFWriter():
     #REVIEW - separate user-facing notes from internal logging
     def write_notes(self, cdf):
         if self.notes:
-            cdf.attrs['Export_notes'] = self.notes
+            cdf.attrs['EXPORT_NOTES'] = self.notes
             #one readable block in the console too, for now
             print(f"[EXPORT] clean_cdf: {len(self.notes)} notes for {self.dataset.tag}:")
             for msg in self.notes:
