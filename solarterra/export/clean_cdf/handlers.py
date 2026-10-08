@@ -19,6 +19,10 @@ CDF_NUMPY_TYPES = {
     'CDF_REAL4': np.float32, 'CDF_FLOAT': np.float32,
     'CDF_REAL8': np.float64, 'CDF_DOUBLE': np.float64,
 }
+#our ISTP fills for types the shared DataType map leaves None (create_datatype.py TYPE_FILLVAL), tried after it
+EXPORT_FILLVAL = {
+    'CDF_INT8': '-9223372036854775808',
+}
 #ISTP fill for floats; only a default: aggregated values get it, otherwise the var's own FILLVAL wins
 DEFAULT_FLOAT_FILL = -1.0e31
 #CDF_EPOCH is ms since year 0, unix is s since 1970
@@ -272,12 +276,13 @@ class CleanCDFWriter():
         return value if isinstance(value, (list, tuple)) else [value]
 
     def _fill_value(self, var, np_type):
-        '''Fill value: matchfile FILLVAL -> DataType default, first one that fits.'''
+        '''Fill value: matchfile FILLVAL -> DataType default -> EXPORT_FILLVAL, first one that fits.'''
         candidates = [var.fillval]
         try:
             candidates.append(var.get_data_type_instance().fillval)
         except Exception:
             pass
+        candidates.append(EXPORT_FILLVAL.get(var.datatype))
         for raw in candidates:
             if raw is None or raw == "":
                 continue
