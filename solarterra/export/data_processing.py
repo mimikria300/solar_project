@@ -151,7 +151,10 @@ class DataHandler():
                 continue
             
             arr_mask = self.mask[idx, :] #a view, will be edited in-place
-            proper_arr = self.data_by_var[idx, :].copy().astype(df.data_type_instance.numpy_type)
+            proper_arr = self.data_by_var[idx, :].copy()
+            #NULLs are already False in the mask, placeholder only so int astype doesn't crash on None
+            proper_arr[~arr_mask] = 0
+            proper_arr = proper_arr.astype(df.data_type_instance.numpy_type)
             #get first non-NaN value as sample for proper_type parsing of the bound
             sample = proper_arr[arr_mask][0] if arr_mask.any() else None
             if vmin_str is not None:

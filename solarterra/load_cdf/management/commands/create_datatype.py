@@ -32,9 +32,9 @@ TYPE_CONVERSION = {
     'CDF_TIME_TT2000': 'models.FloatField',
 }
 
-# commented-out types are NOT just missing: numpy_type None -> astype(None) = float64, which keeps NULLs as NaN
-# (e.g. DOK Fmode_* is UINT2 and mostly NULL; 'uint16' here would crash plotting on None)
-# don't fill these before int paths in plots / export handle NULLs
+# commented-out types fall back to float64 (astype(None)), NULLs come out as NaN
+# int types can't hold NULL: plots cast to float when NULLs are present, export masks NULLs before astype
+# so filling these is safe now (clean_cdf export keeps its own numpy map anyway)
 TYPE_NUMPY = {
     #'CDF_INT1': '',
     #'CDF_BYTE': '',

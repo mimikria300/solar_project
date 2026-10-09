@@ -195,6 +195,9 @@ class Plot():
         full_value_array = query.arrays[field_index]
 
         if component_index is None:
+            #int types can't hold NULL (None), so render them to float: NULLs become nan like in _extract_array_component
+            if None in full_value_array:
+                return full_value_array.astype(float)
             return full_value_array.astype(self.y_field_numpy_type)
 
         return self._extract_array_component(full_value_array, component_index)
