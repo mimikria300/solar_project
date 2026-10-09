@@ -1,3 +1,7 @@
+import logging
+
+logger = logging.getLogger('solarterra.export')
+
 class ExportMiddleware:
 
     def process(self, request):
@@ -25,7 +29,7 @@ class SizeCheckMiddleware(ExportMiddleware):
         max_size = get_max_export_size()
         if size > max_size:
             mb = lambda b: f"{b / 1024 ** 2:,.1f}"
-            print(f"[EXPORT] SizeCheck rejected: ~{size} bytes > {max_size}")
+            logger.warning(f"SizeCheck rejected: ~{size} bytes > {max_size}")
             return HttpResponse(
                 f"Превышен допустимый лимит экспорта: ~{mb(size)} МБ (лимит {mb(max_size)} МБ).\n"
                 f"Сократите интервал времени, выберите меньше переменных или включите агрегацию.\n\n"

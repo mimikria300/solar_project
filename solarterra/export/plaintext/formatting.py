@@ -1,6 +1,9 @@
 #Plaintext export file meta (headers, footers, row labels etc) building
 
 from load_cdf.models import *
+import logging
+
+logger = logging.getLogger('solarterra.export')
 
 class PlainTextMeta():
 
@@ -33,8 +36,8 @@ class PlainTextMeta():
         # Get all field names ordered by variable name then component index to match header
         dyn_fields_q = DynamicField.objects.filter(variable_instance__in=var_group).order_by('variable_instance__name')
         self.dyn_fields = list(dyn_fields_q.all()) #field instances
-        print(
-            f"[EXPORT] in _table_builder. dataset={self.dataset.tag}, depend_field={self.depend_field.field_name}, "
+        logger.debug(
+            f"in _table_builder. dataset={self.dataset.tag}, depend_field={self.depend_field.field_name}, "
             f"dynamic_fields={self.dyn_fields}"
         )
         # prepend epoch/depend field so labels, units, formats, colwidths align with record_arrays column order

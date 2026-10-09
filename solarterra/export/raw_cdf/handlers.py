@@ -6,6 +6,9 @@ from django.db.models import Q
 from load_cdf.models import Upload, CDFFileStored
 from solarterra.utils import float_ts_resolver as ft
 from solarterra.utils import ts_float_resolver as tf
+import logging
+
+logger = logging.getLogger('solarterra.export')
 
 def find_cdf_files(variables, ts_start, ts_end):
     '''Stored CDF files overlapping the time range. 
@@ -33,7 +36,7 @@ def raw_cdf_export(job):
     #TODO: CRUDE AF, raw_cdf shall have it's own ui endpoint
     qs = find_cdf_files(job.variables, job.ts_start, job.ts_end)
 
-    print(f"[EXPORT] raw_cdf: found {qs.count()} CDF files to export")
+    logger.info(f"raw_cdf: found {qs.count()} CDF files to export")
 
     # Create zip file in memory (no temp disk files, no full copies of existing CDF files)
     # BytesIO holds the compressed data only — ZIP_DEFLATED compresses on-the-fly
@@ -44,9 +47,9 @@ def raw_cdf_export(job):
                 # arcname keeps only the filename in the archive (no full path)
                 arcname = os.path.basename(cdf_file.full_path)
                 zip_file.write(cdf_file.full_path, arcname=arcname)
-                print(f"[EXPORT] Added to zip: {cdf_file.full_path}")
+                logger.debug(f"raw_cdf: added to zip {cdf_file.full_path}")
             else:
-                print(f"[EXPORT] Warning: file not found: {cdf_file.full_path}")
+                logger.warning(f"raw_cdf: file not found {cdf_file.full_path}")
     
     # Rewind buffer to start for reading
     zip_buffer.seek(0)

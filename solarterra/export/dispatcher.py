@@ -8,6 +8,9 @@ from export.forms import ExportForm
 from export.middleware import SizeCheckMiddleware
 from export.job import ExportJob
 #from export.middleware import AuthMiddleware, RateLimitMiddleware, FormatChoiceMiddleware
+import logging
+
+logger = logging.getLogger('solarterra.export')
 
 MIDDLEWARE_LIST = [
         #AuthMiddleware(),
@@ -63,7 +66,7 @@ def export_dispatcher(request):
         #one var per distinct group (dataset tag + depend_0)
         var_groups = job.var_groups()
 
-        print(f"[EXPORT] Distinct file groups: {len(var_groups)}")
+        logger.debug(f"distinct file groups: {len(var_groups)}")
 
         # Call single_file_export or multi_file_export accordingly
         if len(var_groups) == 1:

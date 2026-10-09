@@ -6,6 +6,9 @@ from solarterra.utils import float_ts_resolver as ft
 import math
 import datetime as dt
 import numpy as np
+import logging
+
+logger = logging.getLogger('solarterra.export')
 
 class DataHandler():
 
@@ -89,12 +92,11 @@ class DataHandler():
                     expanded.append(flat)
                 rows = expanded
 
-            print("[EXPORT] Data sample (first row):", rows[0] if rows else "No data")
-            print("[EXPORT] Data types in first row:", [type(v).__name__ for v in rows[0]] if rows else "No data")
+            logger.debug(f"data sample (first row): {rows[0] if rows else 'No data'}")
+            logger.debug(f"data types in first row: {[type(v).__name__ for v in rows[0]] if rows else 'No data'}")
             
             pile = np.stack(rows)
-            print("PILE SHAPE", pile.shape)
-            print("[EXPORT] PILE DTYPE:", pile.dtype)
+            logger.debug(f"pile shape {pile.shape}, dtype {pile.dtype}")
             # sort everything by the first row
             sorted_pile = pile[pile[:, 0].argsort()]
 
@@ -114,7 +116,7 @@ class DataHandler():
             except TypeError:
                 #object pile = int NULLs (None) + float NaNs mixed, so check for both
                 #(!= None alone lets NaN through as valid and it poisons agg bins)
-                print(f"[EXPORT] set_mask(): object pile {self.data_by_var.shape}, fields: {self.all_field_names}")
+                logger.debug(f"set_mask(): object pile {self.data_by_var.shape}, fields: {self.all_field_names}")
                 self.mask = self._is_present(self.data_by_var).astype(bool)
         else:
             self.mask = None
@@ -268,13 +270,13 @@ class DataHandler():
             return None
 
     def test(self):
-        print("DATA BY VAR", self.data_by_var)
-        print("DATA BY RECORD", self.data_by_record)
+        logger.debug(f"DATA BY VAR {self.data_by_var}")
+        logger.debug(f"DATA BY RECORD {self.data_by_record}")
         #numpy datatypes vs proper DataType numpy types for every field
         ff = self.filter_field
-        print(f"FILTER FIELD: {ff.field_name}, ACTURAL TYPE: {self.data_by_var[0].dtype}, NUMPY PROPER TYPE: {ff.data_type_instance.numpy_type}")
+        logger.debug(f"FILTER FIELD: {ff.field_name}, ACTURAL TYPE: {self.data_by_var[0].dtype}, NUMPY PROPER TYPE: {ff.data_type_instance.numpy_type}")
         for n,df in enumerate(self.data_fields, start=1):
-            print(f"FIELD: {df.field_name}, ACTURAL TYPE: {self.data_by_var[n].dtype}, NUMPY PROPER TYPE: {df.data_type_instance.numpy_type}")
+            logger.debug(f"FIELD: {df.field_name}, ACTURAL TYPE: {self.data_by_var[n].dtype}, NUMPY PROPER TYPE: {df.data_type_instance.numpy_type}")
 
 class Bin():
 

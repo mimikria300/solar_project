@@ -10,6 +10,9 @@ from spacepy import pycdf
 import numpy as np
 import datetime as dt
 import tempfile, os, io, zipfile, ctypes
+import logging
+
+logger = logging.getLogger('solarterra.export')
 
 #DataType.numpy_type has holes (CDF_UINT2 is None), so own map
 CDF_NUMPY_TYPES = {
@@ -95,7 +98,7 @@ def _make_cdf_file(job, dataset, var_group):
         with open(cdf_path, 'rb') as cdf_file:
             cdf_bytes = cdf_file.read()
 
-    print(f"[EXPORT] clean_cdf: wrote {filename}, {len(cdf_bytes)} bytes, {len(writer.notes)} notes")
+    logger.info(f"clean_cdf: wrote {filename}, {len(cdf_bytes)} bytes, {len(writer.notes)} notes")
     return filename, cdf_bytes
 
 
@@ -219,14 +222,13 @@ class CleanCDFWriter():
     def write_notes(self, cdf):
         if self.notes:
             cdf.attrs['EXPORT_NOTES'] = self.notes
-            #one readable block in the console too, for now
-            print(f"[EXPORT] clean_cdf: {len(self.notes)} notes for {self.dataset.tag}:")
-            for msg in self.notes:
-                print(f"    - {msg}")
+            #one readable block in the log too, for now
+            block = "\n".join(f"    - {msg}" for msg in self.notes)
+            logger.info(f"clean_cdf: {len(self.notes)} notes for {self.dataset.tag}:\n{block}")
 
     #---HELPERS---
     def note(self, msg):
-        print(f"[EXPORT] clean_cdf: {msg}")
+        logger.debug(f"clean_cdf: {msg}")
         self.notes.append(msg)
 
     def _new_record_var(self, cdf, name, values, cdf_type):

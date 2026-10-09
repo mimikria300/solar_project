@@ -13,6 +13,9 @@ from django.db.models import Q
 import numpy as np
 import datetime as dt
 import tempfile, os, shutil, zipfile, io
+import logging
+
+logger = logging.getLogger('solarterra.export')
 
 def plain_text_stream(ptm, rows):
     '''
@@ -89,8 +92,7 @@ def single_file_export(job, dataset, var_group):
 
     filename = f"{dataset.tag}_{var_group[0].depend_0}_{job.mode_tag}_{real_dt_str}.txt"
 
-    print(f"[EXPORT] Single file streaming. Dataset: {dataset.tag}, depend_0: {var_group[0].depend_0}")
-    print(f"[EXPORT] Streaming plain text file for dataset={dataset.tag}, depend_0={var_group[0].depend_0}, variables={len(var_group)}")
+    logger.info(f"plaintext: streaming {filename}, variables={len(var_group)}")
 
     response = StreamingHttpResponse(
         plain_text_stream(ptm, rows),
@@ -105,17 +107,17 @@ def multi_file_export(job, var_groups):
     Export each variable group as its own plain-text file, zipped together.
     Returns an HttpResponse with the zip archive attached.
     '''
-    print(f"[EXPORT] Multiple variable groups detected. Exporting each group as a separate file, expected filecount: {len(var_groups)}")
+    logger.info(f"plaintext: {len(var_groups)} variable groups -> one file each, zipped")
     zip_timestamp = dt.datetime.now().strftime("%Y-%d-%m-%H-%M")
     zip_filename = f"exported_data_{zip_timestamp}.zip"
     with tempfile.TemporaryDirectory() as temp_dir:
         export_dir = os.path.join(temp_dir, "exported_data")
         os.makedirs(export_dir, exist_ok=True)
 
-        print(f"[EXPORT] Temp export dir: {export_dir}")
+        logger.debug(f"plaintext: temp export dir {export_dir}")
 
         for item in var_groups:
-            print(f"[EXPORT] Processing variable group: {item.dataset.tag} {item.depend_0}")
+            logger.debug(f"plaintext: processing group {item.dataset.tag} {item.depend_0}")
             var_group = job.group_vars(item)
 
             ptm, rows, real_dt_str = _process_single_group(job, item.dataset, var_group)
@@ -127,17 +129,17 @@ def multi_file_export(job, var_groups):
                 for line in plain_text_stream(ptm, rows):
                     file_handle.write(line)
 
-            print(f"[EXPORT] Wrote file: {filepath}")
+            logger.debug(f"plaintext: wrote {filepath}")
 
         archive_base = os.path.join(temp_dir, "exported_data")
         resulting_zip_path = shutil.make_archive(archive_base, 'zip', export_dir)
 
-        print(f"[EXPORT] Zip created: {resulting_zip_path}")
+        logger.debug(f"plaintext: zip created {resulting_zip_path}")
 
         with open(resulting_zip_path, 'rb') as zip_handle:
             zip_bytes = zip_handle.read()
 
-        print(f"[EXPORT] Zip size in bytes: {len(zip_bytes)}")
+        logger.info(f"plaintext: zip {zip_filename}, {len(zip_bytes)} bytes")
 
     response = HttpResponse(zip_bytes, content_type="application/zip")
     response["Content-Disposition"] = f'attachment; filename="{zip_filename}"'
