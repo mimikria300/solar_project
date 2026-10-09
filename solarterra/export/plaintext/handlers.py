@@ -108,7 +108,7 @@ def multi_file_export(job, var_groups):
     Returns an HttpResponse with the zip archive attached.
     '''
     logger.info(f"plaintext: {len(var_groups)} variable groups -> one file each, zipped")
-    zip_timestamp = dt.datetime.now().strftime("%Y-%d-%m-%H-%M")
+    zip_timestamp = dt.datetime.now().strftime("%Y-%m-%d-%H-%M")
     zip_filename = f"exported_data_{zip_timestamp}.zip"
     with tempfile.TemporaryDirectory() as temp_dir:
         export_dir = os.path.join(temp_dir, "exported_data")
