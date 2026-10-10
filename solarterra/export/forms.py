@@ -18,3 +18,4 @@ class ExportForm(forms.Form):
         label="Валидировать данные",
         required=False
     )
+    split_by_day = forms.BooleanField(required=False, label="Разбить по дням (Clean CDF export)")

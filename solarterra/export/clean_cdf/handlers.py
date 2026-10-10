@@ -1,5 +1,6 @@
 #clean CDF export: same data pipeline as plaintext, but meta is OURS (matchfile), not the dirty original attrs
 #reading order: exports -> _make_cdf_file -> _fetch_data -> CleanCDFWriter (main methods first, helpers after)
+#ISTP stands for International Solar-Terrestrial Physics; standard for naming conventions in CDF files
 
 from export.data_processing import DataHandler
 from load_cdf.models import DynamicField, Upload
@@ -14,7 +15,7 @@ import logging
 
 logger = logging.getLogger('solarterra.export')
 
-#DataType.numpy_type has holes (CDF_UINT2 is None), so own map
+#DataType.numpy_type has holes (CDF_UINT2 is None), these are fallback fillers
 CDF_NUMPY_TYPES = {
     'CDF_INT1': np.int8, 'CDF_BYTE': np.int8, 'CDF_UINT1': np.uint8,
     'CDF_INT2': np.int16, 'CDF_UINT2': np.uint16,
@@ -49,12 +50,23 @@ def clean_cdf_export(job, dataset, var_group):
 
 
 def multi_clean_cdf_export(job, var_groups):
-    '''One CDF per var group, zipped -> response'''
+    '''One CDF per var group (per day too if split), zipped -> response'''
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
         for item in var_groups:
-            filename, cdf_bytes = _make_cdf_file(job, item.dataset, job.group_vars(item))
-            zip_file.writestr(filename, cdf_bytes)
+            var_group = job.group_vars(item)
+            if not job.split_by_day:
+                zip_file.writestr(*_make_cdf_file(job, item.dataset, var_group))
+                continue
+            #empty days are skipped; no data on any day -> one whole-range file with the "no data" note
+            written = 0
+            for day_job in job.day_jobs():
+                made = _make_cdf_file(day_job, item.dataset, var_group, skip_empty=True)
+                if made is not None:
+                    zip_file.writestr(*made)
+                    written += 1
+            if written == 0:
+                zip_file.writestr(*_make_cdf_file(job, item.dataset, var_group))
 
     zip_timestamp = dt.datetime.now().strftime("%Y-%m-%d-%H-%M")
     response = HttpResponse(zip_buffer.getvalue(), content_type='application/zip')
@@ -63,10 +75,12 @@ def multi_clean_cdf_export(job, var_groups):
 
 
 #---PIPELINE---
-def _make_cdf_file(job, dataset, var_group):
-    '''Builds one CDF -> (filename, cdf_bytes). No data still gives a file, with a note.'''
+def _make_cdf_file(job, dataset, var_group, skip_empty=False):
+    '''Builds one CDF -> (filename, cdf_bytes). No data still gives a file, with a note (None if skip_empty).'''
     writer = CleanCDFWriter(dataset, var_group)
     result = _fetch_data(writer, job)
+    if result is None and skip_empty:
+        return None
 
     file_dt_str = job.dt_str
     bin_size = None
