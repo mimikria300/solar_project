@@ -2,7 +2,7 @@
 from django.http import HttpResponse
 from export.plaintext.handlers import single_file_export, multi_file_export
 from export.raw_cdf.handlers import raw_cdf_export
-from export.clean_cdf.handlers import clean_cdf_export, multi_clean_cdf_export
+from export.clean_cdf.handlers import clean_cdf_export, multi_clean_cdf_export, make_vargroup_bundles
 from pages.forms import VariableSelectForm
 from export.forms import ExportForm
 from export.middleware import SizeCheckMiddleware
@@ -45,6 +45,7 @@ def export_dispatcher(request):
         aggregate=export_data["aggregate"],
         validate=export_data["validate"], #ExportForm's, not VariableSelectForm's
         split_by_day=export_data["split_by_day"],
+        split_by_resolution=export_data["split_by_resolution"],
     )
     #everything we add to the request lives in ONE dict -> `del request.export_context` drops it all if something safety-related happens
     request.export_context = {"job": job}
@@ -81,12 +82,11 @@ def export_dispatcher(request):
     #SECTION - clean_cdf
     elif job.export_format == "clean_cdf":
 
-        #cdf per var group (dataset + depend_0), zip if many (split by day is always a zip)
-        var_groups = job.var_groups()
-        if len(var_groups) == 1 and not job.split_by_day:
-            item = var_groups[0]
-            return clean_cdf_export(job, item.dataset, job.group_vars(item))
-        return multi_clean_cdf_export(job, var_groups)
+        #cdf per dataset (all its var groups in one), or per var group if split by resolution; zip if many (split by day is always a zip)
+        bundles = make_vargroup_bundles(job, job.var_groups())
+        if len(bundles) == 1 and not job.split_by_day:
+            return clean_cdf_export(job, *bundles[0])
+        return multi_clean_cdf_export(job, bundles)
     
     #SECTION - unsupported format
     else: 

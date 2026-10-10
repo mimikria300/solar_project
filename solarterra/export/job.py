@@ -12,6 +12,7 @@ class ExportJob:
     aggregate: bool
     validate: bool 
     split_by_day: bool = False #clean_cdf only: one file per UTC day
+    split_by_resolution: bool = False #clean_cdf only: one CDF per var group instead of all groups of a dataset in one
 
     @property #re-computed on read
     def dt_str(self):

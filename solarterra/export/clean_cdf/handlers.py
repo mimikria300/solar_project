@@ -1,5 +1,5 @@
 #clean CDF export: same data pipeline as plaintext, but meta is OURS (matchfile), not the dirty original attrs
-#reading order: exports -> _make_cdf_file -> _fetch_data -> CleanCDFWriter (main methods first, helpers after)
+#reading order: exports -> _make_cdf_file -> _fetch_data -> CDFGroup -> CleanCDFWriter (main methods first, helpers after)
 #ISTP stands for International Solar-Terrestrial Physics; standard for naming conventions in CDF files
 
 from export.data_processing import DataHandler
@@ -11,6 +11,7 @@ from spacepy import pycdf
 import numpy as np
 import datetime as dt
 import tempfile, os, io, zipfile, ctypes
+from dataclasses import dataclass
 import logging
 
 logger = logging.getLogger('solarterra.export')
@@ -41,32 +42,44 @@ GLOBAL_ATTRIBUTE_KEYS = [
 
 
 #---EXPORTS---
-def clean_cdf_export(job, dataset, var_group):
-    '''Single var group -> single CDF file response.'''
-    filename, cdf_bytes = _make_cdf_file(job, dataset, var_group)
+def make_vargroup_bundles(job, var_groups):
+    '''What goes into one CDF -> [(dataset, [var_group, ...])]. Useful for multiepoch datasets'''
+    bundles = []
+    for item in var_groups: #ordered by dataset tag, so groups of one dataset come in a row
+        var_group = job.group_vars(item)
+        if not job.split_by_resolution and bundles and bundles[-1][0].pk == item.dataset_id:
+            bundles[-1][1].append(var_group)
+        else:
+            bundles.append((item.dataset, [var_group]))
+    return bundles
+
+
+def clean_cdf_export(job, dataset, var_groups):
+    '''One file bundle -> single CDF file response.'''
+    filename, cdf_bytes = _make_cdf_file(job, dataset, var_groups)
     response = HttpResponse(cdf_bytes, content_type='application/x-cdf')
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
     return response
 
 
-def multi_clean_cdf_export(job, var_groups):
-    '''One CDF per var group (per day too if split), zipped -> response'''
+def multi_clean_cdf_export(job, bundles):
+    '''One CDF per file bundle, zipped -> response
+    Also used in splitting files by day.'''
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-        for item in var_groups:
-            var_group = job.group_vars(item)
+        for dataset, var_groups in bundles:
             if not job.split_by_day:
-                zip_file.writestr(*_make_cdf_file(job, item.dataset, var_group))
+                zip_file.writestr(*_make_cdf_file(job, dataset, var_groups))
                 continue
             #empty days are skipped; no data on any day -> one whole-range file with the "no data" note
             written = 0
             for day_job in job.day_jobs():
-                made = _make_cdf_file(day_job, item.dataset, var_group, skip_empty=True)
+                made = _make_cdf_file(day_job, dataset, var_groups, skip_empty=True)
                 if made is not None:
                     zip_file.writestr(*made)
                     written += 1
             if written == 0:
-                zip_file.writestr(*_make_cdf_file(job, item.dataset, var_group))
+                zip_file.writestr(*_make_cdf_file(job, dataset, var_groups))
 
     zip_timestamp = dt.datetime.now().strftime("%Y-%m-%d-%H-%M")
     response = HttpResponse(zip_buffer.getvalue(), content_type='application/zip')
@@ -75,21 +88,28 @@ def multi_clean_cdf_export(job, var_groups):
 
 
 #---PIPELINE---
-def _make_cdf_file(job, dataset, var_group, skip_empty=False):
-    '''Builds one CDF -> (filename, cdf_bytes). No data still gives a file, with a note (None if skip_empty).'''
-    writer = CleanCDFWriter(dataset, var_group)
-    result = _fetch_data(writer, job)
-    if result is None and skip_empty:
+def _make_cdf_file(job, dataset, var_groups, skip_empty=False):
+    '''Builds one CDF of one dataset, one or more var groups -> (filename, cdf_bytes).
+    No data still gives a file, with a note (None if skip_empty and no group has data).'''
+    groups = [CDFGroup.from_vars(var_group) for var_group in var_groups]
+    writer = CleanCDFWriter(dataset)
+    results = [_fetch_data(dataset, group, job) for group in groups]
+    found = [r for r in results if r is not None]
+    if not found and skip_empty:
         return None
 
     file_dt_str = job.dt_str
     bin_size = None
-    if result is not None:
-        time_array, columns, valid, bin_size = result
+    if found:
+        bin_size = found[0][3] #same Bin for every group: it only depends on the requested range
         if job.aggregate:
-            file_dt_str = ft(time_array[0]).strftime('%Y%m%d%H%M') + '_' + ft(time_array[-1]).strftime('%Y%m%d%H%M')
+            first = min(r[0][0] for r in found)
+            last = max(r[0][-1] for r in found)
+            file_dt_str = ft(first).strftime('%Y%m%d%H%M') + '_' + ft(last).strftime('%Y%m%d%H%M')
 
-    filename = f"{dataset.tag}_{writer.depend_var.name}_{job.mode_tag}_{file_dt_str}.cdf"
+    #one group keeps its epoch in the name (same as split), several -> dataset level
+    epoch_part = f"{groups[0].depend_var.name}_" if len(groups) == 1 else ""
+    filename = f"{dataset.tag}_{epoch_part}{job.mode_tag}_{file_dt_str}.cdf"
     info = {
         'filename': filename, 'ts_start': job.ts_start, 'ts_end': job.ts_end,
         'aggregate': job.aggregate, 'validate': job.validate, 'bin_size': bin_size,
@@ -101,10 +121,14 @@ def _make_cdf_file(job, dataset, var_group, skip_empty=False):
         cdf = pycdf.CDF(cdf_path, '')
         try:
             writer.write_global_attrs(cdf, info)
-            if result is None:
-                writer.note(f"No data for the requested interval {job.ts_start} to {job.ts_end}")
-            else:
-                writer.write_data(cdf, time_array, columns, valid, job.aggregate)
+            for group, result in zip(groups, results):
+                if result is None:
+                    no_data = f"no data for the requested interval {job.ts_start} to {job.ts_end}"
+                    #several groups -> say which one is empty
+                    writer.note(f"{group.depend_var.name}: {no_data}" if len(groups) > 1 else no_data.capitalize())
+                    continue
+                time_array, columns, valid, _ = result
+                writer.write_data(cdf, group, time_array, columns, valid, job.aggregate)
             writer.write_notes(cdf)
         finally:
             cdf.close()
@@ -116,14 +140,14 @@ def _make_cdf_file(job, dataset, var_group, skip_empty=False):
     return filename, cdf_bytes
 
 
-def _fetch_data(writer, job):
-    '''Query, validate, aggregate -> (time_array, columns, valid, bin_size). None if there's no data.'''
+def _fetch_data(dataset, group, job):
+    '''Query, validate, aggregate one group -> (time_array, columns, valid, bin_size). None if there's no data.'''
     data = DataHandler(
-        dataset=writer.dataset,
-        filter_field=writer.depend_field,
+        dataset=dataset,
+        filter_field=group.depend_field,
         ts_start=job.ts_start,
         ts_stop=job.ts_end,
-        fields=writer.data_fields,
+        fields=group.data_fields,
     )
     data.query()
     if not data.queryset.exists():
@@ -147,20 +171,36 @@ def _fetch_data(writer, job):
     return data.data_by_var[0].astype(np.float64), data.data_by_var[1:], data.mask[1:], None
 
 
+#---GROUP---
+@dataclass
+class CDFGroup:
+    '''One var group (dataset + depend_0): its epoch var/field + data fields in file order.'''
+    variables: list
+    depend_var: object
+    depend_field: object
+    data_fields: list
+
+    @classmethod
+    def from_vars(cls, var_group):
+        variables = list(var_group)
+        return cls(
+            variables=variables,
+            depend_var=variables[0].get_depend_var(),
+            depend_field=variables[0].get_depend_field(),
+            #order_by name = stable var order in the file; _fetch_data hands this same list to DataHandler, so columns line up with it
+            data_fields=list(
+                DynamicField.objects.filter(variable_instance__in=variables).order_by('variable_instance__name')
+            ),
+        )
+
+
 #---WRITER---
 class CleanCDFWriter():
-    '''Exports one var group (dataset + depend_0) -> one CDF. Dirty meta gets skipped + noted'''
-    #TODO: i want a checkbox to pack a several var groups into a single CDF as an option, maybe even as a default one
+    '''One CDF of one dataset; var groups get written into it one by one. Dirty meta gets skipped + noted'''
 
-    def __init__(self, dataset, var_group):
+    def __init__(self, dataset):
         self.dataset = dataset
-        self.var_group = list(var_group)
-        self.depend_var = self.var_group[0].get_depend_var()
-        self.depend_field = self.var_group[0].get_depend_field()
-        #order_by name = stable var order in the file; _fetch_data hands this same list to DataHandler, so columns line up with it
-        self.data_fields = list(
-            DynamicField.objects.filter(variable_instance__in=self.var_group).order_by('variable_instance__name')
-        )
+        #file-level: shared by all groups written into this CDF
         self.notes = []
         self.written_vars = set()
 
@@ -194,18 +234,18 @@ class CleanCDFWriter():
         if info['aggregate'] and info['bin_size'] is not None:
             cdf.attrs['BIN_SIZE_MS'] = float(info['bin_size']) * 1000.0
 
-    def write_data(self, cdf, time_array, columns, valid, aggregate):
-        '''Time array is in unix seconds; columns/valid are expanded like data_by_var (array field = array_size columns).'''
-        epoch_name = self.depend_var.name
-        epoch_values, epoch_type = self._epoch_values(time_array, self.depend_var.datatype)
+    def write_data(self, cdf, group, time_array, columns, valid, aggregate):
+        '''One group's epoch + data vars. Time array is in unix seconds; columns/valid are expanded like data_by_var (array field = array_size columns).'''
+        epoch_name = group.depend_var.name
+        epoch_values, epoch_type = self._epoch_values(time_array, group.depend_var.datatype)
         self._new_record_var(cdf, epoch_name, epoch_values, epoch_type)
         self.written_vars.add(epoch_name)
-        self._write_common_attrs(cdf, cdf[epoch_name], self.depend_var, np.float64, epoch_type)
+        self._write_common_attrs(cdf, cdf[epoch_name], group.depend_var, np.float64, epoch_type)
         if aggregate:
             cdf[epoch_name].attrs['VAR_NOTES'] = 'Aggregation bin centers'
 
         col = 0
-        for df in self.data_fields:
+        for df in group.data_fields:
             var = df.variable_instance
             size = df.array_size if df.is_array_field else None
             width = size or 1
