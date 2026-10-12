@@ -233,6 +233,7 @@ class CleanCDFWriter():
         #not applicable = not written (matchfiles use null for that, CDF attrs can't hold null)
         if info['aggregate'] and info['bin_size'] is not None:
             cdf.attrs['BIN_SIZE_MS'] = float(info['bin_size']) * 1000.0
+        self._write_original_dataset_attrs(cdf)
 
     def write_data(self, cdf, group, time_array, columns, valid, aggregate):
         '''One group's epoch + data vars. Time array is in unix seconds; columns/valid are expanded like data_by_var (array field = array_size columns).'''
@@ -284,6 +285,18 @@ class CleanCDFWriter():
     def note(self, msg):
         logger.debug(f"clean_cdf: {msg}")
         self.notes.append(msg)
+
+    def _write_original_dataset_attrs(self, cdf):
+        '''Global attrs of the original CDF as one multi-entry text attr, "TITLE: value" per entry.'''
+        #no var-level twin: var names are unchanged, so originals are one ISTP-reader lookup away
+        #loader stores one row per attr, multi-entry ones (e.g. TEXT) newline-joined in value -> kept as is
+        #order between attrs isn't stored (uuid pk) -> alphabetical
+        entries = [
+            f"{title}: {(value or '').strip()}"
+            for title, value in self.dataset.attributes.order_by('title').values_list('title', 'value')
+        ]
+        if entries:
+            cdf.attrs['ORIGINAL_DATASET_ATTRIBUTES'] = entries
 
     def _new_record_var(self, cdf, name, values, cdf_type):
         '''Record-varying var sized to its data. Blocking factor = record count, else the CDF lib preallocates spare records (~2x file size).'''
