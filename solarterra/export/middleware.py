@@ -29,23 +29,32 @@ class SizeCheckMiddleware(ExportMiddleware):
         max_size = get_max_export_size()
         if size > max_size:
             mb = lambda b: f"{b / 1024 ** 2:,.1f}"
-            logger.warning(f"SizeCheck rejected: ~{size} bytes > {max_size}")
+            job = request.export_context["job"]
+            logger.warning(f"SizeCheck rejected: ~{size} bytes > {max_size} (aggregate={job.aggregate})")
+            if job.aggregate:
+                #output is tiny here, it's the raw data read for averaging that's too big -> aggregation isn't the cure
+                ru = (f"Агрегация требует обработки слишком большого объёма исходных данных: ~{mb(size)} МБ (лимит {mb(max_size)} МБ).\n"
+                      f"Сократите интервал времени или выберите меньше переменных.")
+                en = (f"Aggregation would have to process too much raw data: ~{mb(size)} MB, limit is {mb(max_size)} MB.\n"
+                      f"Try a shorter time range or fewer variables.")
+            else:
+                ru = (f"Превышен допустимый лимит экспорта: ~{mb(size)} МБ (лимит {mb(max_size)} МБ).\n"
+                      f"Сократите интервал времени, выберите меньше переменных или включите агрегацию.")
+                en = (f"Requested export is too large: ~{mb(size)} MB, limit is {mb(max_size)} MB.\n"
+                      f"Try a shorter time range, fewer variables, or aggregation.")
             return HttpResponse(
-                f"Превышен допустимый лимит экспорта: ~{mb(size)} МБ (лимит {mb(max_size)} МБ).\n"
-                f"Сократите интервал времени, выберите меньше переменных или включите агрегацию.\n\n"
-                f"Requested export is too large: ~{mb(size)} MB, limit is {mb(max_size)} MB.\n"
-                f"Try a shorter time range, fewer variables, or aggregation.",
+                f"{ru}\n\n{en}",
                 status=413,
                 content_type="text/plain; charset=utf-8",
             )
         return None
 
     def approximate_export_size(self, request):
-        '''Raw CDF: real file sizes. Clean CDF (not aggregated): original files' bytes/second x requested span, once per dataset.
-        Others (+ datasets w/o usable files): records x columns x BYTES_PER_VALUE per group, aggregation caps records at bin count.'''
+        '''Raw CDF: real file sizes. Clean CDF: original files' bytes/second x requested span, once per dataset.
+        Others (+ datasets w/o usable files): records x columns x BYTES_PER_VALUE per group.
+        Aggregation is ignored on purpose: averaging reads ALL raw records in range, so the unaggregated size = its cost.'''
         import os
         from export.config import BYTES_PER_VALUE
-        from export.data_processing import Bin
         from export.raw_cdf.handlers import find_cdf_files
         from solarterra.utils import ts_float_resolver as tf
 
@@ -57,7 +66,7 @@ class SizeCheckMiddleware(ExportMiddleware):
 
         total = 0
         groups = job.var_groups()
-        if job.export_format == "clean_cdf" and not job.aggregate:
+        if job.export_format == "clean_cdf":
             #clean CDF comes out about original size (Maria 09-28: "a day ~ an original file")
             #per file rate (size / its span) x its overlap with the request: yearly/odd-length files work, gaps cost nothing
             #per dataset, not per group: an original file already holds all its groups
@@ -78,8 +87,6 @@ class SizeCheckMiddleware(ExportMiddleware):
                 f"{depend_field.field_name}__gte": tf(job.ts_start),
                 f"{depend_field.field_name}__lt": tf(job.ts_end),
             }).count()
-            if job.aggregate:
-                records = min(records, Bin.PPP)
             columns = 1 #epoch
             for var in var_group:
                 for df in var.dynamic.all():

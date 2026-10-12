@@ -7,7 +7,7 @@ These are defaults; override in settings.py as needed.
 
 # Hard ceiling on total export size (bytes) before SizeCheckMiddleware rejects the request.
 #override via EXPORT_MAX_SIZE_BYTES in django settings (set it tiny to demo the 413)
-EXPORT_MAX_SIZE_BYTES = 5 * 1024 ** 3  # 5 GB
+EXPORT_MAX_SIZE_BYTES = 500 * 1024 ** 2  # 500 MB
 
 #rough bytes per value for size estimates, roughly rounded up
 BYTES_PER_VALUE = {
