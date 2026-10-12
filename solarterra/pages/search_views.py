@@ -176,7 +176,7 @@ def export_clicked(request):
     export_form = ExportForm(data=request.POST)
 
     if var_form.is_valid() and export_form.is_valid():
-        return export_dispatcher(request)
+        return export_dispatcher(request) #that's where the ✨ magic happens
 
     #forms aren't ok, re-render search page with errors
     else:
