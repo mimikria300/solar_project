@@ -102,7 +102,10 @@
 	<div class="page-title">4. Параметры экспорта</div>
 
 	<div>
-		<div>{{ export_form.aggregate }} <label for="id_aggregate"> {{ export_form.aggregate.label }}</label></div>
+		{#mirror of var_form.validate: no name -> never submitted, synced by js below #}
+		<div><input type="checkbox" id="id_validate_mirror"> <label for="id_validate_mirror"> {{ var_form.validate.label }}</label></div>
+		<div>{{ export_form.aggregate }} <label for="id_aggregate"> {{ export_form.aggregate.label }}</label>
+			<span style="opacity: 0.6; font-size: 0.9em;">(только для экспорта, данные для построения всегда усреднены)</span></div>
 		<div>{{ export_form.split_by_day }} <label for="id_split_by_day"> {{ export_form.split_by_day.label }}</label></div>
 		<div>{{ export_form.split_by_resolution }} <label for="id_split_by_resolution"> {{ export_form.split_by_resolution.label }}</label></div>
 		<div><label for="id_export_format">Формат экспорта:</label> {{ export_form.export_format }}</div>
@@ -131,6 +134,34 @@
 
 <script>
     // $('.dateandtime').dateAndTime();
+
+    //export options that only make sense for some formats: grey out + disable the rest
+    //(disabled checkboxes aren't submitted -> server sees False)
+    const EXPORT_OPTION_FORMATS = {
+        id_aggregate: ["plain_text", "clean_cdf"],
+        id_split_by_day: ["clean_cdf"],
+        id_split_by_resolution: ["clean_cdf"],
+    };
+
+    function syncExportOptions() {
+        const format = document.getElementById("id_export_format").value;
+        for (const [boxId, formats] of Object.entries(EXPORT_OPTION_FORMATS)) {
+            const box = document.getElementById(boxId);
+            const off = !formats.includes(format);
+            box.disabled = off;
+            box.parentElement.style.opacity = off ? 0.4 : 1;
+        }
+    }
+
+    document.getElementById("id_export_format").addEventListener("change", syncExportOptions);
+    syncExportOptions(); //initial state (also after a form error re-render)
+
+    //validate box shows up twice (plot + export blocks), keep both in sync
+    const validateBox = document.getElementById("id_validate");
+    const validateMirror = document.getElementById("id_validate_mirror");
+    validateMirror.checked = validateBox.checked;
+    validateBox.addEventListener("change", () => { validateMirror.checked = validateBox.checked; });
+    validateMirror.addEventListener("change", () => { validateBox.checked = validateMirror.checked; });
 </script>
 
 {% endblock %}
